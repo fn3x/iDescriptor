@@ -56,7 +56,8 @@ void handleCallback(const idevice_event_t *event, void *userData)
         QMetaObject::invokeMethod(
             AppContext::sharedInstance(), "addDevice", Qt::QueuedConnection,
             Q_ARG(QString, QString::fromUtf8(event->udid)),
-            Q_ARG(idevice_connection_type, event->conn_type));
+            Q_ARG(idevice_connection_type, event->conn_type),
+            Q_ARG(AddType, AddType::Regular));
         break;
     }
 
@@ -78,7 +79,8 @@ void handleCallback(const idevice_event_t *event, void *userData)
         QMetaObject::invokeMethod(
             AppContext::sharedInstance(), "addDevice", Qt::QueuedConnection,
             Q_ARG(QString, QString::fromUtf8(event->udid)),
-            Q_ARG(idevice_connection_type, event->conn_type));
+            Q_ARG(idevice_connection_type, event->conn_type),
+            Q_ARG(AddType, AddType::Pairing));
         break;
     }
     default:
@@ -233,6 +235,88 @@ MainWindow::MainWindow(QWidget *parent)
 
             updateNoDevicesConnected();
         });
+
+    connect(
+        AppContext::sharedInstance(), &AppContext::devicePairPending, this,
+        [this](const QString &udid) {
+            QWidget *placeholderWidget = new QWidget();
+            QVBoxLayout *layout = new QVBoxLayout(placeholderWidget);
+            QLabel *label = new QLabel(
+                "Device is not paired. Please pair the device to continue.");
+            label->setAlignment(Qt::AlignCenter);
+            layout->addWidget(label);
+            placeholderWidget->setLayout(layout);
+            m_device_menu_widgets[udid.toStdString()] = placeholderWidget;
+
+            // DeviceTabWidget *customTabWidget =
+            //     qobject_cast<DeviceTabWidget *>(ui->tabWidget);
+
+            // QString tabTitle = QString::fromStdString(udid.toStdString());
+            // QPixmap placeholderIcon(16, 16);
+            // placeholderIcon.fill(Qt::red);
+
+            // int mostRecentDevice = customTabWidget->addTabWithIcon(
+            //     placeholderWidget, placeholderIcon, tabTitle);
+            int mostRecentDevice = ui->tabWidget->addTab(
+                placeholderWidget, getDeviceIcon(udid.toStdString()),
+                QString::fromStdString(udid.toStdString()));
+            // customTabWidget->setSizePolicy(QSizePolicy::Expanding,
+            //                                QSizePolicy::Preferred);
+            // customTabWidget->setCurrentIndex(mostRecentDevice);
+            ui->tabWidget->setCurrentIndex(mostRecentDevice);
+            ui->stackedWidget->setCurrentIndex(1); // Show device list page
+        });
+
+    connect(AppContext::sharedInstance(), &AppContext::devicePaired, this,
+            [this](iDescriptorDevice *device) {
+                qDebug() << "Device paired:"
+                         << QString::fromStdString(device->udid);
+
+                DeviceMenuWidget *deviceWidget = new DeviceMenuWidget(device);
+
+                // Find the tab index for this device
+                int tabIndex = -1;
+                for (int i = 0; i < ui->tabWidget->count(); ++i) {
+                    if (ui->tabWidget->tabText(i) ==
+                        QString::fromStdString(device->udid)) {
+                        tabIndex = i;
+                        break;
+                    }
+                }
+
+                // If tab exists, remove the old widget and tab
+                if (tabIndex != -1) {
+                    QWidget *oldWidget = ui->tabWidget->widget(tabIndex);
+                    ui->tabWidget->removeTab(tabIndex);
+                    if (oldWidget)
+                        oldWidget->deleteLater();
+                }
+
+                DeviceTabWidget *customTabWidget =
+                    qobject_cast<DeviceTabWidget *>(ui->tabWidget);
+
+                QString tabTitle =
+                    QString::fromStdString(device->deviceInfo.productType);
+                QPixmap placeholderIcon(16, 16);
+                placeholderIcon.fill(Qt::red);
+
+                int mostRecentDevice = customTabWidget->addTabWithIcon(
+                    deviceWidget, placeholderIcon, tabTitle);
+                // int mostRecentDevice = ui->tabWidget->addTab(
+                // placeholderWidget, getDeviceIcon(udid.toStdString()),
+                // QString::fromStdString(udid.toStdString()));
+                customTabWidget->setSizePolicy(QSizePolicy::Expanding,
+                                               QSizePolicy::Preferred);
+                customTabWidget->setCurrentIndex(mostRecentDevice);
+                // ui->tabWidget->setCurrentIndex(mostRecentDevice);
+                ui->stackedWidget->setCurrentIndex(1); // Show device list page
+
+                // Clean up old mapping and update
+                if (m_device_menu_widgets.count(device->udid)) {
+                    m_device_menu_widgets[device->udid]->deleteLater();
+                }
+                m_device_menu_widgets[device->udid] = deviceWidget;
+            });
 
     connect(
         AppContext::sharedInstance(), &AppContext::recoveryDeviceRemoved, this,

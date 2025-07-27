@@ -32,13 +32,16 @@ private:
 signals:
     void deviceAdded(iDescriptorDevice *device);
     void deviceRemoved(const std::string &udid);
+    void devicePaired(iDescriptorDevice *device);
     void recoveryDeviceAdded(RecoveryDeviceInfo *deviceInfo);
     void recoveryDeviceRemoved(const QString &udid);
+    void devicePairPending(const QString &udid);
     void systemSleepStarting();
     void systemWakeup();
 public slots:
     void removeDevice(QString udid);
-    void addDevice(QString udid, idevice_connection_type connType);
+    void addDevice(QString udid, idevice_connection_type connType,
+                   AddType addType);
 };
 
 #endif // APPCONTEXT_H

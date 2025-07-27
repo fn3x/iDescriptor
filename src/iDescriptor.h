@@ -161,6 +161,8 @@ struct IDescriptorInitDeviceResultRecovery {
 void warn(const QString &message, const QString &title = "Warning",
           QWidget *parent = nullptr);
 
+enum class AddType { Regular, Pairing };
+
 #define APP_LABEL "iDescriptor"
 #define APP_VERSION "0.0.1"
 #define APP_COPYRIGHT "© 2023 Uncore. All rights reserved."

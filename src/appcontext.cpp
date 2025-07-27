@@ -64,12 +64,10 @@ void AppContext::handleDBusSignal(const QDBusMessage &msg)
     }
 }
 
-void AppContext::addDevice(QString udid, idevice_connection_type conn_type)
+void AppContext::addDevice(QString udid, idevice_connection_type conn_type,
+                           AddType addType)
 {
     try {
-        // ui->stackedWidget->setCurrentIndex(1);
-
-        // ui->tabWidget->show();
         IDescriptorInitDeviceResult initResult =
             init_idescriptor_device(udid.toStdString().c_str());
 
@@ -81,10 +79,16 @@ void AppContext::addDevice(QString udid, idevice_connection_type conn_type)
             qDebug() << "Failed to initialize device with UDID: " << udid;
             // return onDeviceInitFailed(udid, initResult.error);
             if (initResult.error == LOCKDOWN_E_PASSWORD_PROTECTED) {
-                warn("Device with UDID " + udid +
-                         " is password protected. Please unlock the device and "
-                         "try again.",
-                     "Warning");
+                // warn("Device with UDID " + udid +
+                //          " is password protected. Please unlock the device
+                //          and " "try again.",
+                //      "Warning");
+                // TODO: also handle pairing devices
+                // the reason why we don't handle pairing devices here is
+                // because it's less likely that it will be an error typeof
+                // LOCKDOWN_E_PASSWORD_PROTECTED if the device is paired type
+                if (addType == AddType::Regular)
+                    emit devicePairPending(udid);
             } else if (initResult.error == LOCKDOWN_E_INVALID_HOST_ID) {
                 warn("Device with UDID " + udid +
                          " is not trusted. Please trust this computer on the "
@@ -97,7 +101,6 @@ void AppContext::addDevice(QString udid, idevice_connection_type conn_type)
             }
             return;
         }
-        // Find the device once using std::find_if
         iDescriptorDevice *device = new iDescriptorDevice{
             .udid = udid.toStdString(),
             .conn_type = conn_type,
@@ -105,29 +108,15 @@ void AppContext::addDevice(QString udid, idevice_connection_type conn_type)
             .deviceInfo = initResult.deviceInfo,
         };
         m_devices[device->udid] = device;
-        emit deviceAdded(device);
+        if (addType == AddType::Regular)
+            return emit deviceAdded(device);
+        emit devicePaired(device);
+
     } catch (const std::exception &e) {
         qDebug() << "Exception in onDeviceAdded: " << e.what();
         // QMessageBox::critical(this, "Error", "An error occurred while
         // processing device information");
     }
-
-    // if (!device) return std::string();
-
-    // QUuid uuid = QUuid::createUuid();
-    // QString uuidNoBraces = uuid.toString(QUuid::WithoutBraces); //
-    // "3F2504E0-4F89-41D3-9A0C-0305E82C3301"
-
-    // If device already exists, clean up the old one first
-    // if (m_devices.contains(uuidNoBraces.toStdString())) {
-    //     cleanDevice(m_devices[uuidNoBraces.toStdString()]);
-    //     delete m_devices[uuidNoBraces.toStdString()];
-    // }
-
-    // m_devices[uuidNoBraces.toStdString()] = device;
-    // return true;
-    // return uuidNoBraces.toStdString();
-    // return device->udid;
 }
 
 void AppContext::removeDevice(QString _udid)

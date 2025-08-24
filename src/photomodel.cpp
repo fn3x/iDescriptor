@@ -277,29 +277,30 @@ void PhotoModel::requestThumbnail(int index)
         // Load video thumbnail asynchronously
         future = QtConcurrent::run([=]() {
             // Check disk cache first
-            if (QFile::exists(cachePath)) {
-                QPixmap cached(cachePath);
-                if (!cached.isNull() && cached.size() == m_thumbnailSize) {
-                    qDebug() << "Video disk cache HIT for:"
-                             << QFileInfo(info.filePath).fileName();
-                    return cached;
-                }
-            }
+            // if (QFile::exists(cachePath)) {
+            //     QPixmap cached(cachePath);
+            //     if (!cached.isNull() && cached.size() == m_thumbnailSize) {
+            //         qDebug() << "Video disk cache HIT for:"
+            //                  << QFileInfo(info.filePath).fileName();
+            //         return cached;
+            //     }
+            // }
 
-            // Generate video thumbnail
-            QPixmap thumbnail = generateVideoThumbnail(m_device, info.filePath,
-                                                       m_thumbnailSize);
+            // // Generate video thumbnail
+            // QPixmap thumbnail = generateVideoThumbnail(m_device,
+            // info.filePath,
+            //                                            m_thumbnailSize);
 
-            // Save to disk cache if successful
-            if (!thumbnail.isNull()) {
-                QDir().mkpath(QFileInfo(cachePath).absolutePath());
-                if (thumbnail.save(cachePath, "JPG", 85)) {
-                    qDebug() << "Saved video thumbnail to disk cache:"
-                             << QFileInfo(info.filePath).fileName();
-                }
-            }
-
-            return thumbnail;
+            // // Save to disk cache if successful
+            // if (!thumbnail.isNull()) {
+            //     QDir().mkpath(QFileInfo(cachePath).absolutePath());
+            //     if (thumbnail.save(cachePath, "JPG", 85)) {
+            //         qDebug() << "Saved video thumbnail to disk cache:"
+            //                  << QFileInfo(info.filePath).fileName();
+            //     }
+            // }
+            return QIcon::fromTheme("video-x-generic").pixmap(m_thumbnailSize);
+            // return thumbnail;
         });
     } else {
         // Load image thumbnail asynchronously (existing logic)

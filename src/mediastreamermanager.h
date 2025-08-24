@@ -2,12 +2,11 @@
 #define MEDIASTREAMERMANAGER_H
 
 #include "iDescriptor.h"
+#include "mediastreamer.h"
 #include <QMap>
 #include <QMutex>
 #include <QObject>
 #include <QUrl>
-
-class MediaStreamer;
 
 /**
  * @brief Singleton manager for MediaStreamer instances
@@ -47,12 +46,7 @@ public:
     void cleanup();
 
 private:
-    explicit MediaStreamerManager(QObject *parent = nullptr);
     ~MediaStreamerManager();
-
-    // Disable copy constructor and assignment operator
-    MediaStreamerManager(const MediaStreamerManager &) = delete;
-    MediaStreamerManager &operator=(const MediaStreamerManager &) = delete;
 
 private slots:
     void onStreamerDestroyed();

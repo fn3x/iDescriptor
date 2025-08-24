@@ -3,28 +3,17 @@
 #include <QDebug>
 #include <QMutexLocker>
 
-// TODO: update singleton implementation
-// Static member definitions
-MediaStreamerManager *MediaStreamerManager::s_instance = nullptr;
-QMutex MediaStreamerManager::s_instanceMutex;
-
-MediaStreamerManager::MediaStreamerManager(QObject *parent) : QObject(parent) {}
-
 MediaStreamerManager::~MediaStreamerManager() { cleanup(); }
 
 MediaStreamerManager *MediaStreamerManager::sharedInstance()
 {
-    QMutexLocker locker(&s_instanceMutex);
-    if (!s_instance) {
-        s_instance = new MediaStreamerManager();
-    }
-    return s_instance;
+    static MediaStreamerManager instance;
+    return &instance;
 }
 
 QUrl MediaStreamerManager::getStreamUrl(iDescriptorDevice *device,
                                         const QString &filePath)
 {
-    QMutexLocker locker(&m_streamersMutex);
 
     // Check if we already have a streamer for this file
     auto it = m_streamers.find(filePath);
@@ -74,7 +63,6 @@ QUrl MediaStreamerManager::getStreamUrl(iDescriptorDevice *device,
 
 void MediaStreamerManager::releaseStreamer(const QString &filePath)
 {
-    QMutexLocker locker(&m_streamersMutex);
 
     auto it = m_streamers.find(filePath);
     if (it != m_streamers.end()) {
@@ -93,7 +81,6 @@ void MediaStreamerManager::releaseStreamer(const QString &filePath)
 
 void MediaStreamerManager::cleanup()
 {
-    QMutexLocker locker(&m_streamersMutex);
 
     auto it = m_streamers.begin();
     while (it != m_streamers.end()) {
@@ -112,8 +99,6 @@ void MediaStreamerManager::cleanup()
 
 void MediaStreamerManager::onStreamerDestroyed()
 {
-    QMutexLocker locker(&m_streamersMutex);
-
     // Find and remove the destroyed streamer
     auto it = m_streamers.begin();
     while (it != m_streamers.end()) {

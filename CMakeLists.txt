@@ -114,6 +114,7 @@ find_library(PLIST_LIBRARY
 
 file(GLOB PROJECT_SOURCES
     src/*.cpp
+    src/core/helpers/*.cpp
     src/*.h
     src/*.ui
     resources.qrc
@@ -131,6 +132,8 @@ find_package(Qt6 REQUIRED COMPONENTS Location)
 find_package(Qt6 REQUIRED COMPONENTS Positioning)
 find_package(Qt6 REQUIRED COMPONENTS QuickWidgets)
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Multimedia)
+find_package(Qt6 REQUIRED COMPONENTS MultimediaWidgets)
 
 
     qt_add_executable(iDescriptor
@@ -162,6 +165,7 @@ target_link_libraries(iDescriptor PRIVATE
     Qt${QT_VERSION_MAJOR}::Svg 
     Qt${QT_VERSION_MAJOR}::SvgWidgets 
     Qt${QT_VERSION_MAJOR}::Multimedia
+    Qt${QT_VERSION_MAJOR}::MultimediaWidgets
     Qt${QT_VERSION_MAJOR}::Network
     Qt${QT_VERSION_MAJOR}::DBus
     Qt${QT_VERSION_MAJOR}::Core

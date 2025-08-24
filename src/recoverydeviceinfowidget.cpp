@@ -1,5 +1,4 @@
 #include "recoverydeviceinfowidget.h"
-#include "./core/helpers/parse_recovery_mode.cpp"
 #include "iDescriptor.h"
 #include "libirecovery.h"
 #include <QDebug>

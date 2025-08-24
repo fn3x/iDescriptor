@@ -24,6 +24,7 @@ public:
 
     // Returns whether there are any devices connected (regular or recovery)
     bool noDevicesConnected();
+    QList<RecoveryDeviceInfo *> getAllRecoveryDevices();
     ~AppContext();
 
 private:

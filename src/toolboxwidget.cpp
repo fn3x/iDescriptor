@@ -124,10 +124,8 @@ void ToolboxWidget::setupUI()
     QWidget *faceIdBox =
         createToolbox("Face ID Test", "Test Face ID functionality",
                       "SP_DialogOkButton", true);
-    QWidget *mountDevImage = createToolbox(
-        "Mount Dev Image", "Mount a device image", "SP_DialogOkButton", true);
     QWidget *unmountDevImage =
-        createToolbox("Unmount Dev Image", "Unmount a device image",
+        createToolbox("Unmount Dev Image", "Unmount a developer image",
                       "SP_DialogOkButton", true);
     QWidget *enterRecoveryMode =
         createToolbox("Enter Recovery Mode", "Enter device recovery mode",
@@ -148,9 +146,8 @@ void ToolboxWidget::setupUI()
     m_gridLayout->addWidget(touchIdBox, 2, 1);
     m_gridLayout->addWidget(faceIdBox, 2, 2);
     m_gridLayout->addWidget(enterRecoveryMode, 3, 0);
-    m_gridLayout->addWidget(mountDevImage, 3, 1);
-    m_gridLayout->addWidget(unmountDevImage, 3, 2);
-    m_gridLayout->addWidget(devDiskImages, 4, 0, 1, 3);
+    m_gridLayout->addWidget(unmountDevImage, 3, 1);
+    m_gridLayout->addWidget(devDiskImages, 3, 2);
 
     m_gridLayout->setRowStretch(3, 1);
 
@@ -380,12 +377,27 @@ void ToolboxWidget::onToolboxClicked(const QString &toolName)
         queryMobileGestaltWidget->show();
     } else if (toolName == "Developer Disk Images") {
         // Handle developer disk images
-        DevDiskImagesWidget *devDiskImagesWidget =
-            new DevDiskImagesWidget(m_currentDevice);
-        devDiskImagesWidget->setAttribute(Qt::WA_DeleteOnClose);
-        devDiskImagesWidget->setWindowFlag(Qt::Window);
-        devDiskImagesWidget->resize(800, 600);
-        devDiskImagesWidget->show();
+        if (!m_devDiskImagesWidget) {
+            m_devDiskImagesWidget = new DevDiskImagesWidget(m_currentDevice);
+            m_devDiskImagesWidget->setAttribute(Qt::WA_DeleteOnClose);
+            m_devDiskImagesWidget->setWindowFlag(Qt::Window);
+            m_devDiskImagesWidget->resize(800, 600);
+            connect(m_devDiskImagesWidget, &QObject::destroyed, this,
+                    [this]() { m_devDiskImagesWidget = nullptr; });
+            m_devDiskImagesWidget->show();
+        } else {
+            m_devDiskImagesWidget->raise();
+            m_devDiskImagesWidget->activateWindow();
+        }
+    } else if (toolName == "Touch ID Test") {
+        // Handle Touch ID test
+        QMessageBox::information(
+            this, "Touch ID Test",
+            "Touch ID test functionality not implemented.");
+    } else if (toolName == "Face ID Test") {
+        // Handle Face ID test
+        QMessageBox::information(this, "Face ID Test",
+                                 "Face ID test functionality not implemented.");
     }
     // Implement specific tool functionality here
 }

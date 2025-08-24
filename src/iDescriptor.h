@@ -117,6 +117,11 @@ struct iDescriptorDevice {
     idevice_connection_type conn_type;
     idevice_t device;
     DeviceInfo deviceInfo;
+    /*
+     inital afc client to start the file explorer and gallery with
+     clients are not long lived, so do not assume this will be valid
+    */
+    afc_client_t afcClient;
 };
 
 struct IDescriptorInitDeviceResult {
@@ -124,6 +129,7 @@ struct IDescriptorInitDeviceResult {
     lockdownd_error_t error;
     idevice_t device;
     DeviceInfo deviceInfo;
+    afc_client_t afcClient;
 };
 
 // Device model identifier to marketing name mapping
@@ -218,3 +224,24 @@ public:
     operator plist_t() const { return current_node; }
     bool valid() const { return current_node != nullptr; }
 };
+
+afc_error_t safe_afc_read_directory(afc_client_t afcClient, idevice_t device,
+                                    const char *path, char ***dirs);
+
+std::string parse_product_type(const std::string &productType);
+
+std::string parse_recovery_mode(irecv_mode productType);
+
+struct MediaEntry {
+    std::string name;
+    bool isDir;
+};
+
+struct MediaFileTree {
+    std::vector<MediaEntry> entries;
+    bool success;
+    std::string currentPath;
+};
+
+MediaFileTree get_file_tree(afc_client_t afcClient, idevice_t device,
+                            const std::string &path = "/");

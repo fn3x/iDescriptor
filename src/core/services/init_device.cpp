@@ -1,5 +1,4 @@
 #include "../../iDescriptor.h"
-#include "../helpers/parse_product_type.cpp"
 #include "./detect_jailbroken.cpp"
 #include "./get-device-info.cpp"
 #include "libirecovery.h"
@@ -108,8 +107,11 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
     return d;
 }
 
+// TODO: need to handle errors and free resources properly
 IDescriptorInitDeviceResult init_idescriptor_device(const char *udid)
 {
+    // TODO:on a broken usb cable this can hang for a long time
+    // causing the UI to freeze
     qDebug() << "Initializing iDescriptor device with UDID: "
              << QString::fromUtf8(udid);
     IDescriptorInitDeviceResult result = {};
@@ -179,8 +181,8 @@ IDescriptorInitDeviceResult init_idescriptor_device(const char *udid)
             qDebug()
                 << "Failed to query diagnostics relay for AppleARMPMUCharger.";
             // Clean up resources before returning
-            if (afcClient)
-                afc_client_free(afcClient);
+            // if (afcClient)
+            // afc_client_free(afcClient);
             if (lockdownService)
                 lockdownd_service_descriptor_free(lockdownService);
             if (client)
@@ -207,16 +209,17 @@ IDescriptorInitDeviceResult init_idescriptor_device(const char *udid)
         // if (result.device) idevice_free(result.device);
 
         fullDeviceInfo(infoXml, afcClient, diagnostics, result.deviceInfo);
+        result.afcClient = afcClient;
         result.success = true;
-
-        if (afcClient)
-            afc_client_free(afcClient);
-        if (lockdownService)
-            lockdownd_service_descriptor_free(lockdownService);
-        if (client)
-            lockdownd_client_free(client);
-        if (diagnostics_client)
-            diagnostics_relay_client_free(diagnostics_client);
+        // TODO: cleanup needed ?
+        // if (afcClient)
+        //     afc_client_free(afcClient);
+        // if (lockdownService)
+        //     lockdownd_service_descriptor_free(lockdownService);
+        // if (client)
+        //     lockdownd_client_free(client);
+        // if (diagnostics_client)
+        //     diagnostics_relay_client_free(diagnostics_client);
         return result;
 
     } catch (const std::exception &e) {

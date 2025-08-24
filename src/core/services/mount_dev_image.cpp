@@ -89,6 +89,8 @@ static ssize_t mim_upload_cb(void *buf, size_t size, void *userdata)
     return fread(buf, 1, size, (FILE *)userdata);
 }
 // TODO: cleanup
+// TODO: may not work on a broken ,faulty or fake usb cable
+// TypeC cables work better
 bool mount_dev_image(const char *udid, const char *image_dir_path)
 {
     mobile_image_mounter_client_t mim = NULL;
@@ -99,68 +101,79 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
     afc_client_t afc = NULL;
     lockdownd_service_descriptor_t service = NULL;
     idevice_t device = NULL;
+    char *image_path = NULL;
+    char *image_sig_path = NULL;
+    FILE *f = NULL;
+    unsigned char *sig = NULL;
+    plist_t mount_options = NULL;
+    char *targetname = NULL;
+    char *mountname = NULL;
+    unsigned int device_version = 0;
+    disk_image_upload_type_t disk_image_upload_type =
+        DISK_IMAGE_UPLOAD_TYPE_AFC;
+
+    mobile_image_mounter_error_t err = MOBILE_IMAGE_MOUNTER_E_UNKNOWN_ERROR;
+    plist_t result = NULL;
+    size_t sig_length = 0;
 
     if (IDEVICE_E_SUCCESS !=
         idevice_new_with_options(&device, udid,
                                  (use_network) ? IDEVICE_LOOKUP_NETWORK
                                                : IDEVICE_LOOKUP_USBMUX)) {
         qDebug() << "ERROR: Could not create idevice!";
-        return false;
+        res = -1;
+        goto leave;
     }
 
+    device_version = idevice_get_device_version(device);
     if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(
                                    device, &lckd, TOOL_NAME))) {
         qDebug() << "ERROR: Could not connect to lockdownd service!";
-        return false;
-        // goto leave;
+        res = -1;
+        goto leave;
     }
 
-    lockdownd_error_t lerr =
-        lockdownd_start_service(lckd, "com.apple.afc", &service);
-    if (lerr != LOCKDOWN_E_SUCCESS) {
-        qDebug() << "ERROR: Could not start AFC service!"
-                 << lockdownd_strerror(lerr) << "(" << lerr << ")";
-        lockdownd_client_free(lckd);
-        lckd = NULL;
-        idevice_free(device);
-        device = NULL;
-        return false;
+    if (device_version >= IDEVICE_DEVICE_VERSION(7, 0, 0)) {
+        disk_image_upload_type = DISK_IMAGE_UPLOAD_TYPE_UPLOAD_IMAGE;
     }
 
-    afc_error_t rafc = afc_client_new(device, service, &afc);
-    if (rafc != AFC_E_SUCCESS) {
-        qDebug() << "ERROR: Could not connect to AFC!" << afc_strerror(rafc)
-                 << "(" << rafc << ")";
-        return false;
-    }
+    if (disk_image_upload_type == DISK_IMAGE_UPLOAD_TYPE_AFC) {
+        lockdownd_error_t lerr =
+            lockdownd_start_service(lckd, "com.apple.afc", &service);
+        if (lerr != LOCKDOWN_E_SUCCESS) {
+            qDebug() << "ERROR: Could not start AFC service!"
+                     << lockdownd_strerror(lerr) << "(" << lerr << ")";
+            res = -1;
+            goto leave;
+        }
 
-    char *image_path = nullptr;
-    char *image_sig_path = nullptr;
+        afc_error_t rafc = afc_client_new(device, service, &afc);
+        if (rafc != AFC_E_SUCCESS) {
+            qDebug() << "ERROR: Could not connect to AFC!" << afc_strerror(rafc)
+                     << "(" << rafc << ")";
+            res = -1;
+            goto leave;
+        }
+        lockdownd_service_descriptor_free(service);
+        service = NULL;
+    }
 
     if (asprintf(&image_path, "%s/DeveloperDiskImage.dmg", image_dir_path) <
         0) {
         qDebug() << "Out of memory constructing image path!";
-        return false;
+        res = -1;
+        goto leave;
     }
 
     if (asprintf(&image_sig_path, "%s/DeveloperDiskImage.dmg.signature",
                  image_dir_path) < 0) {
         qDebug() << "Out of memory constructing signature path!";
-        free(image_path);
-        return false;
+        res = -1;
+        goto leave;
     }
 
-    // #ifndef _WIN32
-    // 	signal(SIGPIPE, SIG_IGN);
-    // #endif
-
-    unsigned int device_version = idevice_get_device_version(device);
-
-    disk_image_upload_type_t disk_image_upload_type =
-        DISK_IMAGE_UPLOAD_TYPE_AFC;
-    if (device_version >= IDEVICE_DEVICE_VERSION(7, 0, 0)) {
-        disk_image_upload_type = DISK_IMAGE_UPLOAD_TYPE_UPLOAD_IMAGE;
-    }
+    qDebug() << "Using image:" << image_path;
+    qDebug() << "Using signature:" << image_sig_path;
 
     if (device_version >= IDEVICE_DEVICE_VERSION(16, 0, 0)) {
         uint8_t dev_mode_status = 0;
@@ -175,7 +188,8 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
             qDebug() << "ERROR: You have to enable Developer Mode on the given "
                         "device in order to allowing mounting a developer disk "
                         "image.";
-            return false;
+            res = -1;
+            goto leave;
         }
     }
 
@@ -184,121 +198,64 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
 
     if (!service || service->port == 0) {
         qDebug() << "ERROR: Could not start mobile_image_mounter service!";
-        return false;
+        res = -1;
+        goto leave;
     }
 
     if (mobile_image_mounter_new(device, service, &mim) !=
         MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
         qDebug() << "ERROR: Could not connect to mobile_image_mounter!";
-        return false;
+        res = -1;
+        goto leave;
     }
-
-    // if (service)
-    // {
-    //     lockdownd_service_descriptor_free(service);
-    //     service = NULL;
-    // }
+    lockdownd_service_descriptor_free(service);
+    service = NULL;
 
     struct stat fst;
-    if (disk_image_upload_type == DISK_IMAGE_UPLOAD_TYPE_AFC) {
-        if (!service || !service->port) {
-            qDebug() << "Could not start com.apple.afc!";
-            return false;
-        }
-        if (!afc) {
-            qDebug() << "Could not connect to AFC!";
-            return false;
-        }
-        if (service) {
-            // lockdownd_service_descriptor_free(service);
-            service = NULL;
-        }
-    }
     if (stat(image_path, &fst) != 0) {
         qDebug() << "ERROR: stat:" << image_path << ":" << strerror(errno);
-        return false;
+        res = -1;
+        goto leave;
     }
     image_size = fst.st_size;
     if (device_version < IDEVICE_DEVICE_VERSION(17, 0, 0) &&
         stat(image_sig_path, &fst) != 0) {
         qDebug() << "ERROR: stat:" << image_sig_path << ":" << strerror(errno);
-        return false;
+        res = -1;
+        goto leave;
     }
-
-    // lockdownd_client_free(lckd);
-    // lckd = NULL;
-
-    mobile_image_mounter_error_t err = MOBILE_IMAGE_MOUNTER_E_UNKNOWN_ERROR;
-    plist_t result = NULL;
-
-    // if (cmd == CMD_LIST)
-    // {
-    //     /* list mounts mode */
-    //     if (!imagetype)
-    //     {
-    //         if (device_version < IDEVICE_DEVICE_VERSION(17, 0, 0))
-    //         {
-    //             imagetype = "Developer";
-    //         }
-    //         else
-    //         {
-    //             imagetype = "Personalized";
-    //         }
-    //     }
-    //     err = mobile_image_mounter_lookup_image(mim, imagetype, &result);
-    //     if (err == MOBILE_IMAGE_MOUNTER_E_SUCCESS)
-    //     {
-    //         res = 0;
-    //         plist_write_to_stream(result, stdout, (xml_mode) ?
-    //         PLIST_FORMAT_XML : PLIST_FORMAT_LIMD, 0);
-    //     }
-    //     else
-    //     {
-    //         printf("Error: lookup_image returned %d\n", err);
-    //     }
-    // }
-
-    unsigned char *sig = NULL;
-    size_t sig_length = 0;
-    FILE *f;
-    // struct stat fst;
-    plist_t mount_options = NULL;
 
     if (device_version < IDEVICE_DEVICE_VERSION(17, 0, 0)) {
         f = fopen(image_sig_path, "rb");
         if (!f) {
             qDebug() << "Error opening signature file" << image_sig_path << ":"
                      << strerror(errno);
-            return false;
+            res = -1;
+            goto leave;
         }
         if (fstat(fileno(f), &fst) != 0) {
             qDebug() << "Error: fstat:" << strerror(errno);
-            return false;
+            res = -1;
+            goto leave;
         }
         sig = (unsigned char *)malloc(fst.st_size);
         sig_length = fread(sig, 1, fst.st_size, f);
         fclose(f);
+        f = NULL;
         if (sig_length == 0) {
             qDebug() << "Could not read signature from file" << image_sig_path;
-            return false;
+            res = -1;
+            goto leave;
         }
 
         f = fopen(image_path, "rb");
         if (!f) {
             qDebug() << "Error opening image file" << image_path << ":"
                      << strerror(errno);
-            return false;
+            res = -1;
+            goto leave;
         }
     } else {
-        if (stat(image_path, &fst) != 0) {
-            qDebug() << "Error: stat:" << image_path << ":" << strerror(errno);
-            return false;
-        }
-        if (!S_ISDIR(fst.st_mode)) {
-            qDebug() << "Error: Personalized Disk Image mount expects a "
-                        "directory as image path.";
-            return false;
-        }
         char *build_manifest_path =
             string_build_path(image_path, "BuildManifest.plist", NULL);
         plist_t build_manifest = NULL;
@@ -318,7 +275,8 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
         if (!build_manifest) {
             qDebug() << "Error: Could not locate BuildManifest.plist inside "
                         "given disk image path!";
-            return false;
+            res = -1;
+            goto leave;
         }
 
         plist_t identifiers = NULL;
@@ -327,7 +285,8 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
                 mim, NULL, &identifiers);
         if (merr != MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
             qDebug() << "Failed to query personalization identifiers:" << merr;
-            return false;
+            res = -1;
+            goto leave;
         }
 
         unsigned int board_id = plist_dict_get_uint(identifiers, "BoardId");
@@ -357,20 +316,23 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
         if (!build_identity) {
             qDebug() << "Error: The given disk image is not compatible with "
                         "the current device.";
-            return false;
+            res = -1;
+            goto leave;
         }
         plist_t p_tc_path =
             plist_access_path(build_identity, 4, "Manifest",
                               "LoadableTrustCache", "Info", "Path");
         if (!p_tc_path) {
             qDebug() << "Error: Could not determine path for trust cache!";
-            return false;
+            res = -1;
+            goto leave;
         }
         plist_t p_dmg_path = plist_access_path(
             build_identity, 4, "Manifest", "PersonalizedDMG", "Info", "Path");
         if (!p_dmg_path) {
             qDebug() << "Error: Could not determine path for disk image!";
-            return false;
+            res = -1;
+            goto leave;
         }
         char *tc_path = string_build_path(
             image_path, plist_get_string_ptr(p_tc_path, NULL), NULL);
@@ -380,7 +342,8 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
                                        &trust_cache_size)) {
             qDebug() << "Error: Trust cache does not exist at" << tc_path
                      << "!";
-            return false;
+            res = -1;
+            goto leave;
         }
         mount_options = plist_new_dict();
         plist_dict_set_item(
@@ -395,7 +358,8 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
         if (!f) {
             qDebug() << "Error opening image file" << image_path << ":"
                      << strerror(errno);
-            return false;
+            res = -1;
+            goto leave;
         }
 
         unsigned char buf[8192];
@@ -427,7 +391,8 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
             mim = NULL;
             if (mobile_image_mounter_start_service(device, &mim, TOOL_NAME) !=
                 MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
-                return false;
+                res = -1;
+                goto leave;
             }
             qDebug() << "No personalization manifest, requesting from TSS...";
             unsigned char *nonce = NULL;
@@ -469,7 +434,8 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
                 qDebug()
                     << "ERROR: Failed to query nonce for developer disk image:"
                     << merr;
-                return false;
+                res = -1;
+                goto leave;
             }
             mobile_image_mounter_free(mim);
             mim = NULL;
@@ -492,7 +458,8 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
             plist_t p_manifest = plist_dict_get_item(response, "ApImg4Ticket");
             if (!PLIST_IS_DATA(p_manifest)) {
                 qDebug() << "Failed to get Img4Ticket";
-                return false;
+                res = -1;
+                goto leave;
             }
 
             uint64_t m4m_len = 0;
@@ -507,26 +474,19 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
         imagetype = "Personalized";
     }
 
-    char *targetname = NULL;
     if (asprintf(&targetname, "%s/%s", PKG_PATH, "staging.dimage") < 0) {
         qDebug() << "Out of memory!?";
-        return false;
+        res = -1;
+        goto leave;
     }
-    char *mountname = NULL;
     if (asprintf(&mountname, "%s/%s", PATH_PREFIX, targetname) < 0) {
         qDebug() << "Out of memory!?";
-        return false;
+        res = -1;
+        goto leave;
     }
 
     if (!imagetype) {
         imagetype = "Developer";
-    }
-
-    if (!mim) {
-        if (mobile_image_mounter_start_service(device, &mim, TOOL_NAME) !=
-            MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
-            return false;
-        }
     }
 
     switch (disk_image_upload_type) {
@@ -552,9 +512,9 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
         if ((afc_file_open(afc, targetname, AFC_FOPEN_WRONLY, &af) !=
              AFC_E_SUCCESS) ||
             !af) {
-            fclose(f);
             qDebug() << "afc_file_open on" << targetname << "failed!";
-            return false;
+            res = -1;
+            goto leave;
         }
 
         char buf[8192];
@@ -576,8 +536,8 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
                     qDebug() << "Error: wrote only" << total << "of"
                              << (unsigned int)amount;
                     afc_file_close(afc, af);
-                    fclose(f);
-                    return false;
+                    res = -1;
+                    goto leave;
                 }
             }
         } while (amount > 0);
@@ -586,8 +546,6 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
         break;
     }
 
-    fclose(f);
-
     if (err != MOBILE_IMAGE_MOUNTER_E_SUCCESS) {
         if (err == MOBILE_IMAGE_MOUNTER_E_DEVICE_LOCKED) {
             qDebug() << "ERROR: Device is locked, can't mount. Unlock device "
@@ -595,7 +553,8 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
         } else {
             qDebug() << "ERROR: Unknown error occurred, can't mount.";
         }
-        return false;
+        res = -1;
+        goto leave;
     }
     qDebug() << "done.";
 
@@ -612,79 +571,70 @@ bool mount_dev_image(const char *udid, const char *image_dir_path)
                     if (!strcmp(status, "Complete")) {
                         qDebug() << "Done.";
                         res = 0;
-                    } else {
-                        qDebug() << "unexpected status value:";
-                        plist_write_to_stream(result, stdout,
-                                              (xml_mode) ? PLIST_FORMAT_XML
-                                                         : PLIST_FORMAT_LIMD,
-                                              (plist_write_options_t)0);
                     }
                     free(status);
-                } else {
-                    qDebug() << "unexpected result:";
-                    plist_write_to_stream(result, stdout,
-                                          (xml_mode) ? PLIST_FORMAT_XML
-                                                     : PLIST_FORMAT_LIMD,
-                                          (plist_write_options_t)0);
                 }
             }
-            node = plist_dict_get_item(result, "Error");
-            if (node) {
-                char *error = NULL;
-                plist_get_string_val(node, &error);
-                if (error) {
-                    qDebug() << "Error:" << error;
-                    free(error);
-                } else {
-                    qDebug() << "unexpected result:";
-                    plist_write_to_stream(result, stdout,
-                                          (xml_mode) ? PLIST_FORMAT_XML
-                                                     : PLIST_FORMAT_LIMD,
-                                          (plist_write_options_t)0);
-                }
-                node = plist_dict_get_item(result, "DetailedError");
+            if (res != 0) { // If not complete, log the error
+                node = plist_dict_get_item(result, "Error");
                 if (node) {
-                    qDebug()
-                        << "DetailedError:" << plist_get_string_ptr(node, NULL);
+                    char *error = NULL;
+                    plist_get_string_val(node, &error);
+                    if (error) {
+                        qDebug() << "Error:" << error;
+                        free(error);
+                    }
+                    node = plist_dict_get_item(result, "DetailedError");
+                    if (node) {
+                        qDebug() << "DetailedError:"
+                                 << plist_get_string_ptr(node, NULL);
+                    }
                 }
-            } else {
-                plist_write_to_stream(result, stdout,
-                                      (xml_mode) ? PLIST_FORMAT_XML
-                                                 : PLIST_FORMAT_LIMD,
-                                      (plist_write_options_t)0);
             }
         }
     } else {
         qDebug() << "Error: mount_image returned" << err;
     }
 
+leave:
+    if (f) {
+        fclose(f);
+    }
     if (result) {
         plist_free(result);
     }
-    // error_out:
-    //     /* perform hangup command */
-    //     mobile_image_mounter_hangup(mim);
-    //     /* free client */
-    //     mobile_image_mounter_free(mim);
+    if (mim) {
+        mobile_image_mounter_free(mim);
+    }
+    if (afc) {
+        afc_client_free(afc);
+    }
+    if (lckd) {
+        lockdownd_client_free(lckd);
+    }
+    if (device) {
+        idevice_free(device);
+    }
+    if (image_path) {
+        free(image_path);
+    }
+    if (image_sig_path) {
+        free(image_sig_path);
+    }
+    if (sig) {
+        free(sig);
+    }
+    if (mount_options) {
+        plist_free(mount_options);
+    }
+    if (targetname) {
+        free(targetname);
+    }
+    if (mountname) {
+        free(mountname);
+    }
 
-    // leave:
-    //     if (afc)
-    //     {
-    //         afc_client_free(afc);
-    //     }
-    //     if (lckd)
-    //     {
-    //         lockdownd_client_free(lckd);
-    //     }
-    //     idevice_free(device);
-
-    //     if (image_path)
-    //         free(image_path);
-    //     if (image_sig_path)
-    //         free(image_sig_path);
-
-    //     return res;
-    return true;
+    return res == 0;
 }
 
 // int main(){return 0;}

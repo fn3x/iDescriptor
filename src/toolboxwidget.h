@@ -1,6 +1,7 @@
 #ifndef TOOLBOXWIDGET_H
 #define TOOLBOXWIDGET_H
 
+#include "devdiskimageswidget.h"
 #include "iDescriptor.h"
 #include <QComboBox>
 #include <QFrame>
@@ -40,6 +41,7 @@ private:
     QList<bool> m_requiresDevice;
     iDescriptorDevice *m_currentDevice;
     std::string m_uuid;
+    DevDiskImagesWidget *m_devDiskImagesWidget;
 
 signals:
 };

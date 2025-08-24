@@ -106,6 +106,7 @@ void AppContext::addDevice(QString udid, idevice_connection_type conn_type,
             .conn_type = conn_type,
             .device = initResult.device,
             .deviceInfo = initResult.deviceInfo,
+            .afcClient = initResult.afcClient,
         };
         m_devices[device->udid] = device;
         if (addType == AddType::Regular)
@@ -176,6 +177,11 @@ iDescriptorDevice *AppContext::getDevice(const std::string &uuid)
 QList<iDescriptorDevice *> AppContext::getAllDevices()
 {
     return m_devices.values();
+}
+
+QList<RecoveryDeviceInfo *> AppContext::getAllRecoveryDevices()
+{
+    return m_recoveryDevices.values();
 }
 
 // Returns whether there are any devices connected (regular or recovery)

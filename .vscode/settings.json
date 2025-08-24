@@ -155,6 +155,18 @@
     "qcoreapplication": "cpp",
     "qdialog": "cpp",
     "qcombobox": "cpp",
-    "qtconcurrent": "cpp"
+    "qtconcurrent": "cpp",
+    "qicon": "cpp",
+    "qlistwidget": "cpp",
+    "qfuturewatcher": "cpp",
+    "qgraphicsview": "cpp",
+    "qtglobal": "cpp",
+    "qgraphicspixmapitem": "cpp",
+    "qresizeevent": "cpp",
+    "qmediaplayer": "cpp",
+    "qvideowidget": "cpp",
+    "qhostaddress": "cpp",
+    "qtcpsocket": "cpp",
+    "qstackedwidget": "cpp"
   }
 }

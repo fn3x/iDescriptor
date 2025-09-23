@@ -1,6 +1,6 @@
 [submodule "src/core/airplay"]
-	path = src/core/airplay
+	path = lib/airplay
 	url = https://github.com/uncor3/airplay
 [submodule "src/lib/ipatool-go"]
-	path = src/lib/ipatool-go
+	path = lib/ipatool-go
 	url = https://github.com/uncor3/libipatool-go.git

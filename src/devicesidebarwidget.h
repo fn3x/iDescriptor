@@ -1,7 +1,7 @@
 #ifndef DEVICESIDEBARWIDGET_H
 #define DEVICESIDEBARWIDGET_H
 
-#include "clickablewidget.h"
+#include "iDescriptor-ui.h"
 #include <QButtonGroup>
 #include <QFrame>
 #include <QHBoxLayout>

@@ -1,5 +1,5 @@
 #include "devicesidebarwidget.h"
-#include "clickablewidget.h"
+#include "iDescriptor-ui.h"
 #include "loadingspinnerwidget.h"
 #include <QDebug>
 #include <QEasingCurve>

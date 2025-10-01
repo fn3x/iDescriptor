@@ -2,9 +2,9 @@
 #define TOOLBOXWIDGET_H
 
 #include "devdiskimageswidget.h"
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include <QComboBox>
-#include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -23,15 +23,15 @@ private slots:
     void onDeviceAdded();
     void onDeviceRemoved();
     void onDeviceSelectionChanged();
-    void onToolboxClicked(const QString &toolName);
+    void onToolboxClicked(iDescriptorTool tool);
 
 private:
     void setupUI();
     void updateDeviceList();
     void updateToolboxStates();
-    QWidget *createToolbox(const QString &title, const QString &description,
-                           const QString &iconName, bool requiresDevice);
-    bool eventFilter(QObject *obj, QEvent *event) override;
+    ClickableWidget *createToolbox(iDescriptorTool tool,
+                                   const QString &description,
+                                   bool requiresDevice);
     QComboBox *m_deviceCombo;
     QLabel *m_deviceLabel;
     QScrollArea *m_scrollArea;

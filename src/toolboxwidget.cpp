@@ -1,7 +1,9 @@
 #include "toolboxwidget.h"
 #include "airplaywindow.h"
 #include "appcontext.h"
+#include "cableinfowidget.h"
 #include "devdiskimageswidget.h"
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "ifusewidget.h"
 #include "pcfileexplorerwidget.h"
@@ -12,6 +14,13 @@
 #include <QDebug>
 #include <QMessageBox>
 #include <QStyle>
+
+struct iDescriptorToolWidget {
+    iDescriptorTool tool;
+    QString description;
+    bool requiresDevice;
+    QString iconName;
+};
 
 bool enterRecoveryMode(iDescriptorDevice *device)
 {
@@ -100,70 +109,50 @@ void ToolboxWidget::setupUI()
     m_gridLayout = new QGridLayout(m_contentWidget);
     m_gridLayout->setSpacing(10);
 
-    // Create toolboxes
-    QWidget *airplayerBox =
-        createToolbox("Airplayer",
-                      "Start an airplayer service to cast your device screen "
-                      "(does not require a device to be connected)",
-                      "SP_MediaPlay", false);
-    QWidget *virtualLocationBox = createToolbox(
-        "Virtual Location", "Simulate GPS location on your device",
-        "SP_DriveNetIcon", true);
-    QWidget *realtimeScreenBox = createToolbox(
-        "Realtime Screen",
-        "View device screen in real-time (wired connection required)",
-        "SP_ComputerIcon", true);
-    QWidget *restartBox = createToolbox("Restart", "Restart device services",
-                                        "SP_MediaStop", true);
-    QWidget *shutdownBox = createToolbox("Shutdown", "Shut down the device",
-                                         "SP_MessageBoxWarning", true);
-    QWidget *recoveryBox =
-        createToolbox("Recovery Mode", "Enter device recovery mode",
-                      "SP_MessageBoxWarning", true);
-    QWidget *mobileGestaltBox = createToolbox(
-        "Query MobileGestalt", "Query device hardware information",
-        "SP_FileDialogDetailedView", true);
-    QWidget *touchIdBox =
-        createToolbox("Touch ID Test", "Test Touch ID functionality",
-                      "SP_DialogOkButton", true);
-    QWidget *faceIdBox =
-        createToolbox("Face ID Test", "Test Face ID functionality",
-                      "SP_DialogOkButton", true);
-    QWidget *unmountDevImage =
-        createToolbox("Unmount Dev Image", "Unmount a developer image",
-                      "SP_DialogOkButton", true);
-    QWidget *enterRecoveryMode =
-        createToolbox("Enter Recovery Mode", "Enter device recovery mode",
-                      "SP_DialogOkButton", true);
+    QList<iDescriptorToolWidget> toolWidgets;
+    toolWidgets.append({iDescriptorTool::Airplayer,
+                        "Start an airplayer service to cast your device screen "
+                        "(does not require a device to be connected)",
+                        false, ""});
+    toolWidgets.append({iDescriptorTool::VirtualLocation,
+                        "Simulate GPS location on your device", true, ""});
+    toolWidgets.append(
+        {iDescriptorTool::RealtimeScreen,
+         "View device screen in real-time (wired connection required)", true,
+         ""});
+    toolWidgets.append(
+        {iDescriptorTool::Restart, "Restart device services", true, ""});
+    toolWidgets.append(
+        {iDescriptorTool::Shutdown, "Shut down the device", true, ""});
+    toolWidgets.append({iDescriptorTool::RecoveryMode,
+                        "Enter device recovery mode", true, ""});
+    toolWidgets.append({iDescriptorTool::QueryMobileGestalt,
+                        "Query device hardware information", true, ""});
+    toolWidgets.append({iDescriptorTool::TouchIdTest,
+                        "Test Touch ID functionality", true, ""});
+    toolWidgets.append(
+        {iDescriptorTool::FaceIdTest, "Test Face ID functionality", true, ""});
+    toolWidgets.append({iDescriptorTool::UnmountDevImage,
+                        "Unmount a developer image", true, ""});
+    toolWidgets.append({iDescriptorTool::EnterRecoveryMode,
+                        "Enter device recovery mode", true, ""});
+    toolWidgets.append({iDescriptorTool::DeveloperDiskImages,
+                        "Manage developer disk images", false, ""});
+    toolWidgets.append({iDescriptorTool::WirelessFileImport,
+                        "Import files wirelessly to your iDevice", false, ""});
+    toolWidgets.append({iDescriptorTool::MountIphone,
+                        "Mount your iPhone's filesystem on your PC", true, ""});
+    toolWidgets.append({iDescriptorTool::CableInfoWidget,
+                        "View detailed cable and connection info", true, ""});
 
-    QWidget *devDiskImages =
-        createToolbox("Developer Disk Images", "Manage developer disk images",
-                      "SP_DialogOkButton", false);
-
-    QWidget *wirelessImport = createToolbox(
-        "Wireless File Import", "Import files wirelessly to your iDevice",
-        "SP_DialogOkButton", false);
-
-    QWidget *mount_iPhone = createToolbox(
-        "Mount iPhone", "Mount your iPhone's filesystem on your PC",
-        "SP_DialogOkButton", false);
-
-    // Add toolboxes to grid (3 columns)
-    m_gridLayout->addWidget(airplayerBox, 0, 0);
-    m_gridLayout->addWidget(virtualLocationBox, 0, 1);
-    m_gridLayout->addWidget(realtimeScreenBox, 0, 2);
-    m_gridLayout->addWidget(restartBox, 1, 0);
-    m_gridLayout->addWidget(shutdownBox, 1, 1);
-    m_gridLayout->addWidget(recoveryBox, 1, 2);
-    m_gridLayout->addWidget(mobileGestaltBox, 2, 0);
-    m_gridLayout->addWidget(touchIdBox, 2, 1);
-    m_gridLayout->addWidget(faceIdBox, 2, 2);
-    m_gridLayout->addWidget(enterRecoveryMode, 3, 0);
-    m_gridLayout->addWidget(unmountDevImage, 3, 1);
-    m_gridLayout->addWidget(devDiskImages, 3, 2);
-    m_gridLayout->addWidget(wirelessImport, 4, 0);
-    m_gridLayout->addWidget(mount_iPhone, 4, 1);
-    m_gridLayout->setRowStretch(3, 1);
+    for (int i = 0; i < toolWidgets.size(); ++i) {
+        const auto &tool = toolWidgets[i];
+        ClickableWidget *toolbox =
+            createToolbox(tool.tool, tool.description, tool.requiresDevice);
+        int row = i / 3;
+        int col = i % 3;
+        m_gridLayout->addWidget(toolbox, row, col);
+    }
 
     m_scrollArea->setWidget(m_contentWidget);
     mainLayout->addWidget(m_scrollArea);
@@ -172,36 +161,78 @@ void ToolboxWidget::setupUI()
             this, &ToolboxWidget::onDeviceSelectionChanged);
 }
 
-QWidget *ToolboxWidget::createToolbox(const QString &title,
-                                      const QString &description,
-                                      const QString &iconName,
-                                      bool requiresDevice)
+ClickableWidget *ToolboxWidget::createToolbox(iDescriptorTool tool,
+                                              const QString &description,
+                                              bool requiresDevice)
 {
-    QFrame *frame = new QFrame();
-    frame->setObjectName("toolboxFrame");
-    frame->setFrameStyle(QFrame::Box);
-    frame->setStyleSheet("#toolboxFrame { "
-                         "border-radius: 5px; padding: 5px; }");
-    frame->setFixedSize(200, 120);
+    ClickableWidget *b = new ClickableWidget();
+    b->setStyleSheet("padding: 5px; border: none; outline: none;");
+    b->setFixedSize(200, 120);
 
-    QVBoxLayout *layout = new QVBoxLayout(frame);
+    QVBoxLayout *layout = new QVBoxLayout(b);
 
     // Icon
     QLabel *iconLabel = new QLabel();
     QIcon icon =
-        this->style()->standardIcon(static_cast<QStyle::StandardPixmap>(
-            iconName == "SP_MediaPlay"           ? QStyle::SP_MediaPlay
-            : iconName == "SP_DriveNetIcon"      ? QStyle::SP_DriveNetIcon
-            : iconName == "SP_ComputerIcon"      ? QStyle::SP_ComputerIcon
-            : iconName == "SP_BrowserReload"     ? QStyle::SP_BrowserReload
-            : iconName == "SP_MediaStop"         ? QStyle::SP_MediaStop
-            : iconName == "SP_MessageBoxWarning" ? QStyle::SP_MessageBoxWarning
-            : iconName == "SP_FileDialogDetailedView"
-                ? QStyle::SP_FileDialogDetailedView
-                : QStyle::SP_DialogOkButton));
+        // TODO:icons
+        this->style()->standardIcon(
+            static_cast<QStyle::StandardPixmap>(QStyle::SP_DialogOkButton));
     iconLabel->setPixmap(icon.pixmap(32, 32));
     iconLabel->setAlignment(Qt::AlignCenter);
-
+    QString title;
+    switch (tool) {
+    case iDescriptorTool::Airplayer:
+        title = "Airplayer";
+        break;
+    case iDescriptorTool::RealtimeScreen:
+        title = "Realtime Screen";
+        break;
+    case iDescriptorTool::EnterRecoveryMode:
+        title = "Enter Recovery Mode";
+        break;
+    case iDescriptorTool::MountDevImage:
+        title = "Mount Dev Image";
+        break;
+    case iDescriptorTool::VirtualLocation:
+        title = "Virtual Location";
+        break;
+    case iDescriptorTool::Restart:
+        title = "Restart";
+        break;
+    case iDescriptorTool::Shutdown:
+        title = "Shutdown";
+        break;
+    case iDescriptorTool::RecoveryMode:
+        title = "Recovery Mode";
+        break;
+    case iDescriptorTool::QueryMobileGestalt:
+        title = "Query Mobile Gestalt";
+        break;
+    case iDescriptorTool::DeveloperDiskImages:
+        title = "Dev Disk Images";
+        break;
+    case iDescriptorTool::WirelessFileImport:
+        title = "Wireless File Import";
+        break;
+    case iDescriptorTool::MountIphone:
+        title = "iFuse Mount";
+        break;
+    case iDescriptorTool::CableInfoWidget:
+        title = "Cable Info";
+        break;
+    case iDescriptorTool::TouchIdTest:
+        title = "Touch ID Test";
+        break;
+    case iDescriptorTool::FaceIdTest:
+        title = "Face ID Test";
+        break;
+    case iDescriptorTool::UnmountDevImage:
+        title = "Unmount Dev Image";
+        break;
+    default:
+        title = "Unknown Tool";
+        break;
+    }
     // Title
     QLabel *titleLabel = new QLabel(title);
     titleLabel->setFont(QFont("Arial", 10, QFont::Bold));
@@ -218,28 +249,13 @@ QWidget *ToolboxWidget::createToolbox(const QString &title,
     layout->addWidget(titleLabel);
     layout->addWidget(descLabel);
 
-    // Make frame clickable
-    frame->setProperty("toolName", title);
-    frame->installEventFilter(this);
-    frame->setCursor(Qt::PointingHandCursor);
+    b->setCursor(Qt::PointingHandCursor);
 
-    m_toolboxes.append(frame);
+    m_toolboxes.append(b);
     m_requiresDevice.append(requiresDevice);
-
-    return frame;
-}
-
-bool ToolboxWidget::eventFilter(QObject *obj, QEvent *event)
-{
-    if (event->type() == QEvent::MouseButtonPress) {
-        QFrame *frame = qobject_cast<QFrame *>(obj);
-        if (frame && frame->isEnabled()) {
-            QString toolName = frame->property("toolName").toString();
-            onToolboxClicked(toolName);
-            return true;
-        }
-    }
-    return QWidget::eventFilter(obj, event);
+    connect(b, &ClickableWidget::clicked,
+            [this, tool]() { onToolboxClicked(tool); });
+    return b;
 }
 
 void ToolboxWidget::updateDeviceList()
@@ -258,8 +274,7 @@ void ToolboxWidget::updateDeviceList()
         for (iDescriptorDevice *device : devices) {
             m_deviceCombo->addItem(QString::fromStdString(device->udid));
         }
-        // DO NOT USE AI HARD TODO:
-        // Set m_uuid to first device if available
+        // TODO:
         m_uuid = devices.first()->udid;
         m_currentDevice = devices.first(); // Set current device to first one
     }
@@ -317,18 +332,24 @@ void ToolboxWidget::onDeviceSelectionChanged()
     m_uuid.clear(); // No valid device selected
 }
 
-void ToolboxWidget::onToolboxClicked(const QString &toolName)
+void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
 {
-    qDebug() << "Toolbox clicked:" << toolName;
 
-    if (toolName == "Airplayer") {
+    switch (tool) {
+    case iDescriptorTool::Airplayer: {
         AirPlayWindow *airplayWindow = new AirPlayWindow();
+        airplayWindow->setAttribute(Qt::WA_DeleteOnClose);
+        airplayWindow->setWindowFlag(Qt::Window);
+        airplayWindow->resize(400, 300);
         airplayWindow->show();
-    } else if (toolName == "Realtime Screen") {
+    } break;
+
+    case iDescriptorTool::RealtimeScreen: {
         RealtimeScreen *realtimeScreen =
             new RealtimeScreen(QString::fromStdString(m_uuid));
         realtimeScreen->show();
-    } else if (toolName == "Enter Recovery Mode") {
+    } break;
+    case iDescriptorTool::EnterRecoveryMode: {
         // Handle entering recovery mode
         bool success = enterRecoveryMode(m_currentDevice);
         QMessageBox msgBox;
@@ -339,8 +360,9 @@ void ToolboxWidget::onToolboxClicked(const QString &toolName)
             msgBox.setText("Failed to enter recovery mode.");
         }
         msgBox.exec();
-    } else if (toolName == "Mount Dev Image") {
-        // Handle mounting device image
+    } break;
+    case iDescriptorTool::MountDevImage: {
+        // TODO: Handle mounting device image
         // bool success =
         //     mount_dev_image(const_cast<char
         //     *>(m_currentDevice->udid.c_str()));
@@ -351,8 +373,8 @@ void ToolboxWidget::onToolboxClicked(const QString &toolName)
         // } else {
         //     msgBox.setText("Failed to mount device image.");
         // }
-        // msgBox.exec();
-    } else if (toolName == "Virtual Location") {
+    } break;
+    case iDescriptorTool::VirtualLocation: {
         // Handle virtual location functionality
         VirtualLocation *virtualLocation = new VirtualLocation(m_currentDevice);
         virtualLocation->setAttribute(
@@ -360,7 +382,8 @@ void ToolboxWidget::onToolboxClicked(const QString &toolName)
         virtualLocation->setWindowFlag(Qt::Window); // Make it a true window
         virtualLocation->resize(800, 600);          // Optional: default size
         virtualLocation->show();
-    } else if (toolName == "Restart") {
+    } break;
+    case iDescriptorTool::Restart: {
         // TODO:WIP
         std::string udid = m_currentDevice->udid;
         AppContext::sharedInstance()->instanceRemoveDevice(
@@ -375,32 +398,35 @@ void ToolboxWidget::onToolboxClicked(const QString &toolName)
             warn("Device services restarted successfully", "Success");
             qDebug() << "Restarting device";
         }
-    } else if (toolName == "Shutdown") {
+    } break;
+    case iDescriptorTool::Shutdown: {
         // TODO
         //  if (!(shutdown(m_currentDevice->device)))
         //      warn("Failed to shutdown device");
-        qDebug() << "Shutting down device...";
-    } else if (toolName == "Recovery Mode") {
+    } break;
+    case iDescriptorTool::RecoveryMode: {
         // Handle entering recovery mode
-        // bool success = enterRecoveryMode(m_currentDevice);
-        // QMessageBox msgBox;
-        // msgBox.setWindowTitle("Recovery Mode");
-        // if (success)
-        // {
-        //     msgBox.setText("Successfully entered recovery mode.");
-        // }
-        // else
-        // {
-        //     msgBox.setText("Failed to enter recovery mode.");
-        // }
-        // msgBox.exec();
-    } else if (toolName == "Query MobileGestalt") {
+        bool success = enterRecoveryMode(m_currentDevice);
+        QMessageBox msgBox;
+        msgBox.setWindowTitle("Recovery Mode");
+        if (success) {
+            msgBox.setText("Successfully entered recovery mode.");
+        } else {
+            msgBox.setText("Failed to enter recovery mode.");
+        }
+        msgBox.exec();
+    } break;
+    case iDescriptorTool::QueryMobileGestalt: {
         // Handle querying MobileGestalt
         QueryMobileGestaltWidget *queryMobileGestaltWidget =
             new QueryMobileGestaltWidget(m_currentDevice);
+        queryMobileGestaltWidget->setAttribute(Qt::WA_DeleteOnClose);
+        queryMobileGestaltWidget->setWindowFlag(Qt::Window);
+        queryMobileGestaltWidget->resize(800, 600);
         queryMobileGestaltWidget->show();
-    } else if (toolName == "Developer Disk Images") {
-        // Handle developer disk images
+    } break;
+    case iDescriptorTool::DeveloperDiskImages: {
+        // single instance lock
         if (!m_devDiskImagesWidget) {
             m_devDiskImagesWidget = new DevDiskImagesWidget(m_currentDevice);
             m_devDiskImagesWidget->setAttribute(Qt::WA_DeleteOnClose);
@@ -413,19 +439,31 @@ void ToolboxWidget::onToolboxClicked(const QString &toolName)
             m_devDiskImagesWidget->raise();
             m_devDiskImagesWidget->activateWindow();
         }
-    } else if (toolName == "Wireless File Import") {
+    } break;
+    case iDescriptorTool::WirelessFileImport: {
         // Handle wireless file import
         PCFileExplorerWidget *fileExplorer = new PCFileExplorerWidget();
         fileExplorer->setAttribute(Qt::WA_DeleteOnClose);
         fileExplorer->setWindowFlag(Qt::Window);
         fileExplorer->resize(800, 600);
         fileExplorer->show();
-    } else if (toolName == "Mount iPhone") {
+    } break;
+    case iDescriptorTool::MountIphone: {
         iFuseWidget *ifuseWidget = new iFuseWidget(m_currentDevice);
         ifuseWidget->setAttribute(Qt::WA_DeleteOnClose);
         ifuseWidget->setWindowFlag(Qt::Window);
         ifuseWidget->resize(600, 400);
         ifuseWidget->show();
+    } break;
+    case iDescriptorTool::CableInfoWidget: {
+        CableInfoWidget *cableInfoWidget = new CableInfoWidget(m_currentDevice);
+        cableInfoWidget->setAttribute(Qt::WA_DeleteOnClose);
+        cableInfoWidget->setWindowFlag(Qt::Window);
+        cableInfoWidget->resize(600, 400);
+        cableInfoWidget->show();
+    } break;
+    default:
+        qDebug() << "Clicked on unimplemented tool";
+        break;
     }
-    // Implement specific tool functionality here
 }

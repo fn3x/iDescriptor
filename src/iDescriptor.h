@@ -449,3 +449,5 @@ void fetchAppIconFromApple(const QString &bundleId,
                            QObject *context);
 
 afc_error_t afc2_client_new(idevice_t device, afc_client_t *afc);
+
+void get_cable_info(idevice_t device, plist_t &response);

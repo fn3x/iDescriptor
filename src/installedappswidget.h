@@ -22,6 +22,8 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <libimobiledevice/afc.h>
+#include <libimobiledevice/house_arrest.h>
 
 // Custom App Tab Widget
 class AppTabWidget : public QGroupBox
@@ -68,6 +70,7 @@ class InstalledAppsWidget : public QWidget
 public:
     explicit InstalledAppsWidget(iDescriptorDevice *device,
                                  QWidget *parent = nullptr);
+    ~InstalledAppsWidget();
 
 private slots:
     void onAppsDataReady();
@@ -90,7 +93,7 @@ private:
     void selectAppTab(AppTabWidget *tab);
     void filterApps(const QString &searchText);
     void loadAppContainer(const QString &bundleId);
-    void createHouseArrestAfcClient();
+    void cleanupHouseArrestClients();
 
     iDescriptorDevice *m_device;
     QHBoxLayout *m_mainLayout;
@@ -111,7 +114,8 @@ private:
     QFutureWatcher<QVariantMap> *m_watcher;
     QFutureWatcher<QVariantMap> *m_containerWatcher;
     QSplitter *m_splitter;
-
+    house_arrest_client_t m_houseArrestClient = nullptr;
+    afc_client_t m_houseArrestAfcClient = nullptr;
     // App data storage
     QList<AppTabWidget *> m_appTabs;
     AppTabWidget *m_selectedTab = nullptr;

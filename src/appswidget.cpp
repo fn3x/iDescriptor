@@ -4,6 +4,7 @@
 #include "appdownloaddialog.h"
 #include "appinstalldialog.h"
 #include "appstoremanager.h"
+#include "iDescriptor-ui.h"
 #include "logindialog.h"
 #include "zlineedit.h"
 #include <QApplication>
@@ -80,13 +81,20 @@ void AppsWidget::setupUI()
     m_statusLabel->setStyleSheet("font-size: 14px; color: #666;");
 
     mainLayout->addWidget(headerWidget);
-    // todo: implement theme aware icon
-    QAction *searchAction =
-        m_searchEdit->addAction(QIcon(":/resources/icons/MdiLightMagnify.png"),
-                                QLineEdit::TrailingPosition);
-    searchAction->setToolTip("Search");
-    connect(searchAction, &QAction::triggered, this,
+
+    static ZIcon searchIcon(":/resources/icons/MdiLightMagnify.png");
+    m_searchAction = m_searchEdit->addAction(
+        searchIcon.getThemedPixmap(QSize(16, 16), palette()),
+        QLineEdit::TrailingPosition);
+    m_searchAction->setToolTip("Search");
+    connect(m_searchAction, &QAction::triggered, this,
             &AppsWidget::performSearch);
+
+    // Update search icon when theme changes
+    connect(qApp, &QApplication::paletteChanged, this, [this]() {
+        m_searchAction->setIcon(
+            searchIcon.getThemedPixmap(QSize(16, 16), palette()));
+    });
 
     headerLayout->addWidget(m_searchEdit);
     headerLayout->addStretch();

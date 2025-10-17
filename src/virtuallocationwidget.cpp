@@ -1,5 +1,6 @@
-#include "virtual_location.h"
+#include "virtuallocationwidget.h"
 #include "appcontext.h"
+#include "devdiskimagehelper.h"
 #include "devdiskmanager.h"
 #include "iDescriptor.h"
 #include <QDebug>
@@ -20,8 +21,6 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
-
-// #include <qt6/QtPositioning/qgeocoordinate.h>
 
 VirtualLocation::VirtualLocation(iDescriptorDevice *device, QWidget *parent)
     : QWidget{parent}, m_device(device)
@@ -122,13 +121,23 @@ VirtualLocation::VirtualLocation(iDescriptorDevice *device, QWidget *parent)
                     this->close();
                     this->deleteLater();
                 }
-                // qDebug() << "VirtualLocation detected device change to"
-                //  << (device ? device->udid.c_str() : "null");
             });
 
-    bool res =
-        DevDiskManager::sharedInstance()->downloadCompatibleImage(m_device);
-    qDebug() << "Mount result:" << res;
+    DevDiskManager::sharedInstance()->downloadCompatibleImage(m_device);
+
+    QTimer::singleShot(0, this, [this]() {
+        unsigned int device_version =
+            idevice_get_device_version(m_device->device);
+        unsigned int deviceMajorVersion = (device_version >> 16) & 0xFF;
+
+        if (deviceMajorVersion > 16) {
+            QMessageBox::information(this, "Info",
+                                     "Virtual Location feature requires iOS "
+                                     "16 or earlier. Support for iOS " +
+                                         QString::number(deviceMajorVersion) +
+                                         " is still under development.");
+        }
+    });
 }
 
 void VirtualLocation::onQuickWidgetStatusChanged(QQuickWidget::Status status)
@@ -263,62 +272,56 @@ void VirtualLocation::updateInputsFromMap(double latitude, double longitude)
 
 void VirtualLocation::onApplyClicked()
 {
-    GetMountedImageResult result =
-        DevDiskManager::sharedInstance()->getMountedImage(
-            m_device->udid.c_str());
-
-    if (!result.success) {
-        QMessageBox::warning(this, "Failure", result.message.c_str());
-        return;
-    }
-
-    if (result.success || result.sig.empty()) {
-        bool devImgSuccess =
-            DevDiskManager::sharedInstance()->mountCompatibleImage(m_device);
-        if (!devImgSuccess) {
-            QMessageBox::warning(this, "Failure",
-                                 "Failed to mount developer image on device. "
-                                 "Try with a different cable.");
-            qDebug() << "Failed to mount developer image on device. Cannot set "
-                        "location.";
-            return;
-        }
-    }
-
     bool latOk, lonOk;
     double latitude = m_latitudeEdit->text().toDouble(&latOk);
     double longitude = m_longitudeEdit->text().toDouble(&lonOk);
 
-    if (latOk && lonOk) {
-        emit locationChanged(latitude, longitude);
-
-        // Update map one final time
-        updateMapFromInputs();
-
-        // Visual feedback
-        m_applyButton->setText("Applied!");
-        m_applyButton->setEnabled(false);
-
-        QTimer::singleShot(1000, this, [this]() {
-            m_applyButton->setText("Apply Settings");
-            m_applyButton->setEnabled(true);
-        });
-        bool success = set_location(
-            m_device->device,
-            const_cast<char *>(m_latitudeEdit->text().toStdString().c_str()),
-            const_cast<char *>(m_longitudeEdit->text().toStdString().c_str()));
-
-        if (!success) {
-            warn("Failed to set location on device");
-            qDebug() << "Failed to set location on device";
-        } else {
-            // todo: thread safe?
-            QMessageBox::information(this, "Success",
-                                     "Location applied successfully!");
-            qDebug() << "Applied location settings:" << latitude << ","
-                     << longitude;
-        }
-    } else {
-        qDebug() << "Invalid coordinate values";
+    if (!latOk || !lonOk) {
+        QMessageBox::warning(
+            this, "Invalid Input",
+            "Please enter valid latitude and longitude values.");
+        return;
     }
+
+    // Create and show the helper dialog
+    auto *helper = new DevDiskImageHelper(m_device, this);
+
+    connect(helper, &DevDiskImageHelper::mountingCompleted, this,
+            [this, latitude, longitude, helper](bool success) {
+                helper->deleteLater();
+
+                if (!success) {
+                    return;
+                }
+
+                // Apply location
+                emit locationChanged(latitude, longitude);
+                updateMapFromInputs();
+
+                // Visual feedback
+                m_applyButton->setText("Applied!");
+                m_applyButton->setEnabled(false);
+
+                QTimer::singleShot(1000, this, [this]() {
+                    m_applyButton->setText("Apply Settings");
+                    m_applyButton->setEnabled(true);
+                });
+
+                bool locationSuccess = set_location(
+                    m_device->device,
+                    const_cast<char *>(
+                        m_latitudeEdit->text().toStdString().c_str()),
+                    const_cast<char *>(
+                        m_longitudeEdit->text().toStdString().c_str()));
+
+                if (!locationSuccess) {
+                    QMessageBox::warning(this, "Error",
+                                         "Failed to set location on device");
+                } else {
+                    QMessageBox::information(this, "Success",
+                                             "Location applied successfully!");
+                }
+            });
+
+    helper->start();
 }

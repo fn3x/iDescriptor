@@ -20,10 +20,10 @@ public:
     // TODO:public or private?
     // Image list management
     QNetworkReply *fetchImageList();
-    GetImagesSortedFinalResult parseImageList(int deviceMajorVersion,
-                                              int deviceMinorVersion,
-                                              const char *mounted_sig,
-                                              uint64_t mounted_sig_len);
+    QList<ImageInfo> parseImageList(int deviceMajorVersion,
+                                    int deviceMinorVersion,
+                                    const char *mounted_sig,
+                                    uint64_t mounted_sig_len);
     QList<ImageInfo> getAllImages() const;
 
     // Download management
@@ -75,12 +75,10 @@ private:
     QMap<QString, ImageInfo> m_availableImages;
     QMap<QNetworkReply *, DownloadItem *> m_activeDownloads;
 
-    void sortVersions(GetImagesSortedResult &sortedResult);
-
     QMap<QString, QMap<QString, QString>> parseDiskDir();
     // TODO:move this to header
     bool m_isImageListReady = false;
-    GetImagesSortedResult
+    QList<ImageInfo>
     getImagesSorted(QMap<QString, QMap<QString, QString>> imageFiles,
                     int deviceMajorVersion, int deviceMinorVersion,
                     const char *mounted_sig, uint64_t mounted_sig_len);

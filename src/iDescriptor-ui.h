@@ -61,6 +61,48 @@ protected:
     }
 };
 
+class ZIcon : public QIcon
+{
+public:
+    ZIcon() : QIcon() {}
+    ZIcon(const QIcon &icon) : QIcon(icon) {}
+    ZIcon(const QString &fileName) : QIcon(fileName) {}
+    ZIcon(const QPixmap &pixmap) : QIcon(pixmap) {}
+
+    QPixmap getThemedPixmap(const QSize &size, const QPalette &palette) const
+    {
+        QPixmap pixmap = QIcon::pixmap(size);
+        if (pixmap.isNull()) {
+            return pixmap;
+        }
+
+        // Get the appropriate icon color based on theme
+        QColor iconColor = palette.color(QPalette::WindowText);
+
+        // Create a colored version of the icon
+        QPixmap coloredPixmap(pixmap.size());
+        coloredPixmap.fill(Qt::transparent);
+
+        QPainter iconPainter(&coloredPixmap);
+        iconPainter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        iconPainter.drawPixmap(0, 0, pixmap);
+        iconPainter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        iconPainter.fillRect(coloredPixmap.rect(), iconColor);
+
+        return coloredPixmap;
+    }
+
+    void paint(QPainter *painter, const QRect &rect,
+               const QPalette &palette) const
+    {
+        QPixmap themedPixmap = getThemedPixmap(rect.size(), palette);
+        if (!themedPixmap.isNull()) {
+            painter->drawPixmap(rect, themedPixmap);
+        } else {
+            QIcon::paint(painter, rect);
+        }
+    }
+};
 class ZIconWidget : public QWidget
 {
     Q_OBJECT
@@ -78,7 +120,7 @@ public:
 
     void setIcon(const QIcon &icon)
     {
-        m_icon = icon;
+        m_icon = ZIcon(icon);
         update();
     }
     void setIconSize(const QSize &size)
@@ -106,31 +148,11 @@ protected:
             painter.drawEllipse(rect().adjusted(2, 2, -2, -2));
         }
 
-        // Draw icon centered with theme-appropriate color
         QRect iconRect = rect();
         iconRect.setSize(m_iconSize);
         iconRect.moveCenter(rect().center());
 
-        // Get the appropriate icon color based on theme
-        QColor iconColor = palette().color(QPalette::WindowText);
-
-        // Create a colored version of the icon
-        QPixmap pixmap = m_icon.pixmap(m_iconSize);
-        if (!pixmap.isNull()) {
-            QPixmap coloredPixmap(pixmap.size());
-            coloredPixmap.fill(Qt::transparent);
-
-            QPainter iconPainter(&coloredPixmap);
-            iconPainter.setCompositionMode(
-                QPainter::CompositionMode_SourceOver);
-            iconPainter.drawPixmap(0, 0, pixmap);
-            iconPainter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-            iconPainter.fillRect(coloredPixmap.rect(), iconColor);
-
-            painter.drawPixmap(iconRect, coloredPixmap);
-        } else {
-            m_icon.paint(&painter, iconRect);
-        }
+        m_icon.paint(&painter, iconRect, palette());
     }
 
     void mousePressEvent(QMouseEvent *event) override
@@ -168,7 +190,7 @@ protected:
     }
 
 private:
-    QIcon m_icon;
+    ZIcon m_icon;
     QSize m_iconSize;
     bool m_pressed;
 };
@@ -176,7 +198,6 @@ private:
 enum class iDescriptorTool {
     Airplayer,
     RealtimeScreen,
-    EnterRecoveryMode,
     MountDevImage,
     VirtualLocation,
     Restart,
@@ -185,14 +206,15 @@ enum class iDescriptorTool {
     QueryMobileGestalt,
     DeveloperDiskImages,
     WirelessFileImport,
-    MountIphone,
     CableInfoWidget,
-    TouchIdTest,
-    FaceIdTest,
-    UnmountDevImage,
+    /*
+        TODO: to be implemented
+        TouchIdTest,
+        FaceIdTest,
+    */
     NetworkDevices,
-    Unknown,
-    iFuse
+    iFuse,
+    Unknown
 };
 
 class ModernSplitterHandle : public QSplitterHandle

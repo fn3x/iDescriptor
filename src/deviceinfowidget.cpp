@@ -31,7 +31,6 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
     QHBoxLayout *mainLayout = new QHBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 10, 0);
     mainLayout->setSpacing(1);
-    mainLayout->addStretch();
 
     // Left side container for image and actions
     QWidget *leftContainer = new QWidget();
@@ -82,7 +81,10 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
     leftLayout->addWidget(actionsWidget, 0, Qt::AlignCenter);
     leftLayout->addStretch();
 
+    // Add stretches around leftContainer to center it horizontally
+    mainLayout->addStretch();
     mainLayout->addWidget(leftContainer);
+    mainLayout->addStretch();
 
     // Right side: Info Table
     QWidget *infoContainer = new QWidget();
@@ -99,6 +101,8 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
 
     QLabel *devProductType =
         new QLabel(QString::fromStdString(device->deviceInfo.productType));
+    devProductType->setToolTip(
+        QString::fromStdString(device->deviceInfo.marketingName));
     devProductType->setStyleSheet("font-size: 1rem; font-weight: bold;");
 
     QLabel *diskCapacityLabel = new QLabel(
@@ -130,11 +134,9 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
     chargingLayout->setSpacing(5);
 
     // Create icon label
-    m_lightningIconLabel = new QLabel();
-    QPixmap lightningIcon(":/resources/icons/MdiLightningBolt.png");
-    QPixmap scaledIcon = lightningIcon.scaled(26, 26, Qt::KeepAspectRatio,
-                                              Qt::SmoothTransformation);
-    m_lightningIconLabel->setPixmap(scaledIcon);
+    m_lightningIconLabel = new ZIconWidget(
+        QIcon(":/resources/icons/MdiLightningBolt.png"), " Charging", this);
+
     m_batteryWidget =
         new BatteryWidget(device->deviceInfo.batteryInfo.currentBatteryLevel,
                           device->deviceInfo.batteryInfo.isCharging, this);
@@ -305,6 +307,7 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
     // rightSideLayout->setAlignment(Qt::AlignCenter);
 
     mainLayout->addLayout(rightSideLayout);
+    mainLayout->addStretch();
 
     m_updateTimer = new QTimer(this);
     connect(m_updateTimer, &QTimer::timeout, this,

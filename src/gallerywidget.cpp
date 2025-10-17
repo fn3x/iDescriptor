@@ -1,17 +1,18 @@
 #include "gallerywidget.h"
-#include "fileexportdialog.h"
+#include "exportmanager.h"
 #include "iDescriptor.h"
 #include "mediapreviewdialog.h"
-#include "photoexportmanager.h"
 #include "photomodel.h"
 #include "servicemanager.h"
 #include <QComboBox>
 #include <QDebug>
 #include <QFileDialog>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QItemSelectionModel>
 #include <QLabel>
 #include <QListView>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRegularExpression>
@@ -21,6 +22,21 @@
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrent>
 
+/*
+    FIXME: this needs to be refactored once we
+    figure out how to query Photos.sqlite
+    Check out:
+    https://github.com/ScottKjr3347/iOS_Local_PL_Photos.sqlite_Queries
+*/
+
+GalleryWidget::GalleryWidget(iDescriptorDevice *device, QWidget *parent)
+    : QWidget{parent}, m_device(device), m_model(nullptr),
+      m_stackedWidget(nullptr), m_albumSelectionWidget(nullptr),
+      m_albumListView(nullptr), m_photoGalleryWidget(nullptr),
+      m_listView(nullptr), m_backButton(nullptr)
+{
+}
+/*Load is called when the tab is active*/
 void GalleryWidget::load()
 {
     if (m_loaded)
@@ -29,18 +45,6 @@ void GalleryWidget::load()
     m_loaded = true;
 
     setupUI();
-}
-
-GalleryWidget::GalleryWidget(iDescriptorDevice *device, QWidget *parent)
-    : QWidget{parent}, m_device(device), m_model(nullptr),
-      m_exportManager(nullptr), m_stackedWidget(nullptr),
-      m_albumSelectionWidget(nullptr), m_albumListView(nullptr),
-      m_photoGalleryWidget(nullptr), m_listView(nullptr), m_backButton(nullptr)
-{
-    // Initialize export manager
-    m_exportManager = new PhotoExportManager(this);
-
-    // Widget setup is done in load() method when gallery tab is activated
 }
 
 void GalleryWidget::setupUI()
@@ -106,13 +110,11 @@ void GalleryWidget::setupControlsLayout()
     m_exportSelectedButton->setEnabled(false); // Initially disabled
     m_exportSelectedButton->setSizePolicy(QSizePolicy::Preferred,
                                           QSizePolicy::Fixed);
-    m_exportSelectedButton->setStyleSheet("QPushButton { padding: 8px 16px; }");
     m_exportAllButton = new QPushButton("Export All");
-    m_exportAllButton->setStyleSheet("QPushButton { padding: 8px 16px; }");
 
     // Back button
     m_backButton = new QPushButton("← Back to Albums");
-    m_backButton->setVisible(false); // Hidden initially
+    m_backButton->hide(); // Hidden initially
 
     // Connect signals
     connect(m_sortComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -183,7 +185,7 @@ void GalleryWidget::onExportSelected()
         return;
     }
 
-    if (m_exportManager->isExporting()) {
+    if (ExportManager::sharedInstance()->isExporting()) {
         QMessageBox::information(this, "Export in Progress",
                                  "An export is already in progress.");
         return;
@@ -204,29 +206,18 @@ void GalleryWidget::onExportSelected()
         return;
     }
 
-    qDebug() << "Starting export of selected files:" << filePaths.size()
+    // Convert QStringList to QList<ExportItem>
+    QList<ExportItem> exportItems;
+    for (const QString &filePath : filePaths) {
+        QString fileName = filePath.split('/').last();
+        exportItems.append(ExportItem(filePath, fileName));
+    }
+
+    qDebug() << "Starting export of selected files:" << exportItems.size()
              << "items to" << exportDir;
 
-    // Create export dialog and connect signals
-    // todo:cleanup
-    auto *exportDialog = new FileExportDialog(exportDir, this);
-
-    // Connect PhotoExportManager signals to FileExportDialog
-    connect(m_exportManager, &PhotoExportManager::exportStarted, exportDialog,
-            &FileExportDialog::onExportStarted);
-    connect(m_exportManager, &PhotoExportManager::exportProgress, exportDialog,
-            &FileExportDialog::onExportProgress);
-    connect(m_exportManager, &PhotoExportManager::exportFinished, exportDialog,
-            &FileExportDialog::onExportFinished);
-    connect(m_exportManager, &PhotoExportManager::exportCancelled, exportDialog,
-            &FileExportDialog::onExportCancelled);
-
-    // Connect cancel signal from dialog to export manager
-    connect(exportDialog, &FileExportDialog::cancelRequested, m_exportManager,
-            &PhotoExportManager::cancelExport);
-
-    // Start the export
-    m_exportManager->exportFiles(m_device, filePaths, exportDir);
+    ExportManager::sharedInstance()->startExport(m_device, exportItems,
+                                                 exportDir);
 }
 
 void GalleryWidget::onExportAll()
@@ -234,7 +225,7 @@ void GalleryWidget::onExportAll()
     if (!m_model)
         return;
 
-    if (m_exportManager->isExporting()) {
+    if (ExportManager::sharedInstance()->isExporting()) {
         QMessageBox::information(this, "Export in Progress",
                                  "An export is already in progress.");
         return;
@@ -262,29 +253,19 @@ void GalleryWidget::onExportAll()
         return;
     }
 
-    qDebug() << "Starting export of all filtered files:" << filePaths.size()
+    // Convert QStringList to QList<ExportItem>
+    QList<ExportItem> exportItems;
+    for (const QString &filePath : filePaths) {
+        QString fileName = filePath.split('/').last();
+        exportItems.append(ExportItem(filePath, fileName));
+    }
+
+    qDebug() << "Starting export of all filtered files:" << exportItems.size()
              << "items to" << exportDir;
 
-    // Create export dialog and connect signals
-    // todo:cleanup
-    auto *exportDialog = new FileExportDialog(exportDir, this);
-
-    // Connect PhotoExportManager signals to FileExportDialog
-    connect(m_exportManager, &PhotoExportManager::exportStarted, exportDialog,
-            &FileExportDialog::onExportStarted);
-    connect(m_exportManager, &PhotoExportManager::exportProgress, exportDialog,
-            &FileExportDialog::onExportProgress);
-    connect(m_exportManager, &PhotoExportManager::exportFinished, exportDialog,
-            &FileExportDialog::onExportFinished);
-    connect(m_exportManager, &PhotoExportManager::exportCancelled, exportDialog,
-            &FileExportDialog::onExportCancelled);
-
-    // Connect cancel signal from dialog to export manager
-    connect(exportDialog, &FileExportDialog::cancelRequested, m_exportManager,
-            &PhotoExportManager::cancelExport);
-
-    // Start the export
-    m_exportManager->exportFiles(m_device, filePaths, exportDir);
+    // Start export and the manager will show its own dialog
+    ExportManager::sharedInstance()->startExport(m_device, exportItems,
+                                                 exportDir);
 }
 
 QString GalleryWidget::selectExportDirectory()
@@ -309,31 +290,31 @@ void GalleryWidget::setupAlbumSelectionView()
     instructionLabel->setStyleSheet("font-weight: bold;");
     layout->addWidget(instructionLabel);
 
-    // Create list view for albums
     m_albumListView = new QListView();
-    // m_albumListView->setStyleSheet("QListView { "
-    //                                "    border: 1px solid #c1c1c1ff; "
-    //                                "    background-color: white; "
-    //                                "    padding: 5px; "
-    //                                "} "
-    //                                "QListView::item { "
-    //                                "    padding: 10px; "
-    //                                "    border-bottom: 1px solid #e1e1e1; "
-    //                                "} "
-    //                                "QListView::item:hover { "
-    //                                "    background-color: #f0f0f0; "
-    //                                "} "
-    //                                "QListView::item:selected { "
-    //                                "    background-color: #0078d4; "
-    //                                "    color: white; "
-    //                                "}");
+    m_albumListView->setViewMode(QListView::IconMode);
+    m_albumListView->setFlow(QListView::LeftToRight);
+    m_albumListView->setWrapping(true);
+    m_albumListView->setResizeMode(QListView::Adjust);
+    m_albumListView->setIconSize(QSize(120, 120));
+    m_albumListView->setSpacing(10);
+    m_albumListView->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    m_albumListView->setUniformItemSizes(true);
+
+    m_albumListView->setStyleSheet("QListView { "
+                                   "    border-top: 1px solid #c1c1c1ff; "
+                                   "    background-color: transparent; "
+                                   "    padding: 0px;"
+                                   "} "
+                                   "QListView::item { "
+                                   "    width: 150px; "
+                                   "    height: 150px; "
+                                   "    margin: 2px; "
+                                   "}");
 
     layout->addWidget(m_albumListView);
 
-    // Add the album selection widget to stacked widget
     m_stackedWidget->addWidget(m_albumSelectionWidget);
 
-    // Connect double-click to select album
     connect(m_albumListView, &QListView::doubleClicked, this,
             [this](const QModelIndex &index) {
                 if (!index.isValid())
@@ -359,6 +340,7 @@ void GalleryWidget::setupPhotoGalleryView()
     m_listView->setSpacing(10);
     m_listView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_listView->setUniformItemSizes(true);
+    m_listView->setContextMenuPolicy(Qt::CustomContextMenu);
 
     m_listView->setStyleSheet("QListView { "
                               "    border-top: 1px solid #c1c1c1ff; "
@@ -393,12 +375,13 @@ void GalleryWidget::setupPhotoGalleryView()
                 previewDialog->setAttribute(Qt::WA_DeleteOnClose);
                 previewDialog->show();
             });
+
+    connect(m_listView, &QListView::customContextMenuRequested, this,
+            &GalleryWidget::onPhotoContextMenu);
 }
 
 void GalleryWidget::loadAlbumList()
 {
-    // Get DCIM directory contents
-    qDebug() << "Loading album list from /DCIM";
     AFCFileTree dcimTree = ServiceManager::safeGetFileTree(m_device, "/DCIM");
 
     if (!dcimTree.success) {
@@ -425,23 +408,18 @@ void GalleryWidget::loadAlbumList()
              QRegularExpression("^\\d{4}\\d{2}\\d{2}$")
                  .match(albumName)
                  .hasMatch())) {
-            qDebug() << "Found photo album:" << albumName;
             auto *item = new QStandardItem(albumName);
             QString fullPath = QString("/DCIM/%1").arg(albumName);
             item->setData(fullPath, Qt::UserRole); // Store full path
+
             item->setIcon(QIcon::fromTheme("folder"));
             albumModel->appendRow(item);
+
+            loadAlbumThumbnailAsync(fullPath, item);
         }
     }
 
     m_albumListView->setModel(albumModel);
-
-    if (albumModel->rowCount() == 0) {
-        QMessageBox::information(this, "No Albums",
-                                 "No photo albums found on device.");
-    } else {
-        qDebug() << "Found" << albumModel->rowCount() << "photo albums";
-    }
 }
 
 void GalleryWidget::onAlbumSelected(const QString &albumPath)
@@ -470,9 +448,7 @@ void GalleryWidget::onAlbumSelected(const QString &albumPath)
 
     // Enable controls and show back button
     setControlsEnabled(true);
-    m_backButton->setVisible(true);
-
-    qDebug() << "Loaded album:" << albumPath;
+    m_backButton->show();
 }
 
 void GalleryWidget::onBackToAlbums()
@@ -482,8 +458,7 @@ void GalleryWidget::onBackToAlbums()
 
     // Disable controls and hide back button
     setControlsEnabled(false);
-    m_backButton->setVisible(false);
-
+    m_backButton->hide();
     // Clear current album path
     m_currentAlbumPath.clear();
 }
@@ -495,4 +470,136 @@ void GalleryWidget::setControlsEnabled(bool enabled)
     m_exportSelectedButton->setEnabled(
         enabled && m_listView && m_listView->selectionModel()->hasSelection());
     m_exportAllButton->setEnabled(enabled);
+}
+
+/*
+    FIXME: this needs to be refactored once we
+    figure out how to query Photos.sqlite
+    Check out:
+    https://github.com/ScottKjr3347/iOS_Local_PL_Photos.sqlite_Queries
+*/
+QIcon GalleryWidget::loadAlbumThumbnail(const QString &albumPath)
+{
+    // Get album directory contents
+    AFCFileTree albumTree =
+        ServiceManager::safeGetFileTree(m_device, albumPath.toStdString());
+
+    if (!albumTree.success) {
+        qDebug() << "Failed to read album directory:" << albumPath;
+        return QIcon();
+    }
+
+    // Find the first image file
+    QString firstImagePath;
+    for (const MediaEntry &entry : albumTree.entries) {
+        QString fileName = QString::fromStdString(entry.name);
+
+        if (!entry.isDir && (fileName.endsWith(".JPG", Qt::CaseInsensitive) ||
+                             fileName.endsWith(".PNG", Qt::CaseInsensitive) ||
+                             fileName.endsWith(".HEIC", Qt::CaseInsensitive))) {
+            firstImagePath = albumPath + "/" + fileName;
+            break;
+        }
+    }
+
+    if (firstImagePath.isEmpty()) {
+        qDebug() << "No images found in album:" << albumPath;
+        return QIcon();
+    }
+
+    // Load the thumbnail using ServiceManager
+    QByteArray imageData = ServiceManager::safeReadAfcFileToByteArray(
+        m_device, firstImagePath.toUtf8().constData());
+
+    if (imageData.isEmpty()) {
+        qDebug() << "Could not read image data for thumbnail:"
+                 << firstImagePath;
+        return QIcon();
+    }
+
+    QPixmap thumbnail;
+
+    if (firstImagePath.endsWith(".HEIC", Qt::CaseInsensitive)) {
+        qDebug() << "Loading HEIC thumbnail from:" << firstImagePath;
+        thumbnail = load_heic(imageData);
+    } else {
+        // Load regular image formats
+        if (!thumbnail.loadFromData(imageData)) {
+            qDebug() << "Could not decode image data for thumbnail:"
+                     << firstImagePath;
+            return QIcon();
+        }
+    }
+
+    if (thumbnail.isNull()) {
+        qDebug() << "Failed to load thumbnail from:" << firstImagePath;
+        return QIcon();
+    }
+
+    return QIcon(thumbnail);
+}
+
+void GalleryWidget::loadAlbumThumbnailAsync(const QString &albumPath,
+                                            QStandardItem *item)
+{
+    // Create a future watcher to handle the async result
+    auto *watcher = new QFutureWatcher<QIcon>(this);
+
+    // Connect the finished signal to update the item icon
+    connect(watcher, &QFutureWatcher<QIcon>::finished, this, [watcher, item]() {
+        QIcon result = watcher->result();
+        if (!result.isNull()) {
+            item->setIcon(result);
+        }
+        // The item keeps the folder icon if thumbnail loading fails
+        watcher->deleteLater();
+    });
+
+    // Start the async operation
+    QFuture<QIcon> future = QtConcurrent::run(
+        [this, albumPath]() { return loadAlbumThumbnail(albumPath); });
+
+    watcher->setFuture(future);
+}
+
+void GalleryWidget::onPhotoContextMenu(const QPoint &pos)
+{
+    QModelIndex index = m_listView->indexAt(pos);
+    if (!index.isValid()) {
+        return;
+    }
+
+    // Make sure the item is selected
+    if (!m_listView->selectionModel()->isSelected(index)) {
+        m_listView->selectionModel()->select(
+            index, QItemSelectionModel::ClearAndSelect);
+    }
+
+    QMenu contextMenu(this);
+    QAction *previewAction = contextMenu.addAction("Preview");
+    contextMenu.addSeparator();
+    QAction *exportAction = contextMenu.addAction("Export");
+
+    exportAction->setEnabled(m_listView->selectionModel()->hasSelection());
+
+    connect(previewAction, &QAction::triggered, this, [this, index]() {
+        // Re-use the double-click logic
+        if (!index.isValid())
+            return;
+
+        QString filePath = m_model->data(index, Qt::UserRole).toString();
+        if (filePath.isEmpty())
+            return;
+
+        qDebug() << "Opening preview for" << filePath;
+        auto *previewDialog = new MediaPreviewDialog(
+            m_device, m_device->afcClient, filePath, this);
+        previewDialog->setAttribute(Qt::WA_DeleteOnClose);
+        previewDialog->show();
+    });
+
+    connect(exportAction, &QAction::triggered, this,
+            &GalleryWidget::onExportSelected);
+
+    contextMenu.exec(m_listView->viewport()->mapToGlobal(pos));
 }

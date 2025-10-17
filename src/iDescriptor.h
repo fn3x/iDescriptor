@@ -135,6 +135,7 @@ struct DeviceInfo {
     DiskInfo diskInfo;
     bool is_iPhone;
     bool oldDevice;
+    std::string marketingName;
 };
 
 struct iDescriptorDevice {
@@ -162,7 +163,8 @@ struct iDescriptorRecoveryDevice {
     irecv_mode mode;
     uint32_t cpid;
     uint32_t bdid;
-    const char *displayName;
+    std::string displayName;
+    std::recursive_mutex *mutex;
 };
 
 struct TakeScreenshotResult {
@@ -301,24 +303,19 @@ plist_t _get_mounted_image(const char *udid);
 
 bool restart(std::string udid);
 
-// TODO:move
+enum class ImageCompatibility {
+    Compatible,      // Exact match or known compatible version
+    MaybeCompatible, // Major version matches but minor doesn't
+    NotCompatible    // Not compatible
+};
+
 struct ImageInfo {
     QString version;
     QString dmgPath;
     QString sigPath;
-    bool isCompatible = false;
+    ImageCompatibility compatibility = ImageCompatibility::NotCompatible;
     bool isDownloaded = false;
     bool isMounted = false;
-};
-
-struct GetImagesSortedResult {
-    QStringList compatibleImages;
-    QStringList otherImages;
-};
-
-struct GetImagesSortedFinalResult {
-    QList<ImageInfo> compatibleImages;
-    QList<ImageInfo> otherImages;
 };
 
 /**

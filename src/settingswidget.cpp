@@ -1,4 +1,5 @@
 #include "settingswidget.h"
+#include "settingsmanager.h"
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialog>
@@ -49,6 +50,12 @@ void SettingsWidget::setupUI()
     downloadLayout->addWidget(browseButton);
     generalLayout->addLayout(downloadLayout);
 
+    // Unmount iFuse drives on exit (not implemented on macOS)
+#ifndef __APPLE__
+    m_unmount_iFuseDrives = new QCheckBox("Unmount iFuse drives on exit");
+    generalLayout->addWidget(m_unmount_iFuseDrives);
+#endif
+
     connect(browseButton, &QPushButton::clicked, this,
             &SettingsWidget::onBrowseButtonClicked);
 
@@ -56,11 +63,25 @@ void SettingsWidget::setupUI()
     m_autoUpdateCheck = new QCheckBox("Automatically check for updates");
     generalLayout->addWidget(m_autoUpdateCheck);
 
+    m_autoRaiseWindow =
+        new QCheckBox("Auto-raise main window on device connection");
+    generalLayout->addWidget(m_autoRaiseWindow);
+
+    m_switchToNewDevice = new QCheckBox("Switch to newly connected device");
+    generalLayout->addWidget(m_switchToNewDevice);
+
     // Theme selection
     auto *themeLayout = new QHBoxLayout();
     themeLayout->addWidget(new QLabel("Theme:"));
     m_themeCombo = new QComboBox();
+
+    /* FIXME: Theme control on Linux needs to be implemented */
+#ifdef __linux__
+    m_themeCombo->addItems({"System Default"});
+#else
     m_themeCombo->addItems({"System Default", "Light", "Dark"});
+#endif
+
     themeLayout->addWidget(m_themeCombo);
     themeLayout->addStretch();
     generalLayout->addLayout(themeLayout);
@@ -81,85 +102,7 @@ void SettingsWidget::setupUI()
     timeoutLayout->addStretch();
     deviceLayout->addLayout(timeoutLayout);
 
-    // Auto-detect devices
-    m_autoDetectDevices =
-        new QCheckBox("Automatically detect connected devices");
-    deviceLayout->addWidget(m_autoDetectDevices);
-
-    // Show device notifications
-    m_showDeviceNotifications =
-        new QCheckBox("Show notifications when devices connect/disconnect");
-    deviceLayout->addWidget(m_showDeviceNotifications);
-
     scrollLayout->addWidget(deviceGroup);
-
-    // === DEVELOPER DISK IMAGES ===
-    auto *diskImageGroup = new QGroupBox("Developer Disk Images");
-    auto *diskImageLayout = new QVBoxLayout(diskImageGroup);
-
-    // Auto-mount compatible images
-    m_autoMountImages =
-        new QCheckBox("Automatically mount compatible developer disk images");
-    diskImageLayout->addWidget(m_autoMountImages);
-
-    // Auto-download missing images
-    m_autoDownloadImages =
-        new QCheckBox("Automatically download missing compatible images");
-    diskImageLayout->addWidget(m_autoDownloadImages);
-
-    // Verify image signatures
-    m_verifySignatures =
-        new QCheckBox("Verify image signatures before mounting");
-    diskImageLayout->addWidget(m_verifySignatures);
-
-    scrollLayout->addWidget(diskImageGroup);
-
-    // === FILE OPERATIONS ===
-    auto *fileGroup = new QGroupBox("File Operations");
-    auto *fileLayout = new QVBoxLayout(fileGroup);
-
-    // Show hidden files
-    m_showHiddenFiles = new QCheckBox("Show hidden files and folders");
-    fileLayout->addWidget(m_showHiddenFiles);
-
-    // Confirm file deletions
-    m_confirmDeletions = new QCheckBox("Confirm before deleting files");
-    fileLayout->addWidget(m_confirmDeletions);
-
-    // Max concurrent downloads
-    auto *downloadsLayout = new QHBoxLayout();
-    downloadsLayout->addWidget(new QLabel("Maximum concurrent downloads:"));
-    m_maxDownloads = new QSpinBox();
-    m_maxDownloads->setRange(1, 10);
-    downloadsLayout->addWidget(m_maxDownloads);
-    downloadsLayout->addStretch();
-    fileLayout->addLayout(downloadsLayout);
-
-    scrollLayout->addWidget(fileGroup);
-
-    // === ADVANCED SETTINGS ===
-    auto *advancedGroup = new QGroupBox("Advanced");
-    auto *advancedLayout = new QVBoxLayout(advancedGroup);
-
-    // Debug logging
-    m_enableDebugLogging = new QCheckBox("Enable debug logging");
-    advancedLayout->addWidget(m_enableDebugLogging);
-
-    // Keep log files
-    auto *logLayout = new QHBoxLayout();
-    logLayout->addWidget(new QLabel("Keep log files for:"));
-    m_logRetention = new QSpinBox();
-    m_logRetention->setRange(1, 365);
-    m_logRetention->setSuffix(" days");
-    logLayout->addWidget(m_logRetention);
-    logLayout->addStretch();
-    advancedLayout->addLayout(logLayout);
-
-    // Expert mode
-    m_expertMode = new QCheckBox("Enable expert mode (shows advanced options)");
-    advancedLayout->addWidget(m_expertMode);
-
-    scrollLayout->addWidget(advancedGroup);
 
     // Add stretch to push everything to the top
     scrollLayout->addStretch();
@@ -177,7 +120,6 @@ void SettingsWidget::setupUI()
     m_applyButton = new QPushButton("Apply");
 
     buttonLayout->addWidget(m_checkUpdatesButton);
-    // buttonLayout->addStretch();
     buttonLayout->addWidget(m_resetButton);
     buttonLayout->addWidget(m_applyButton);
     buttonLayout->setContentsMargins(10, 10, 10, 10);
@@ -196,10 +138,28 @@ void SettingsWidget::setupUI()
 
 void SettingsWidget::loadSettings()
 {
-    // TODO: Load from SettingsManager
-    // m_downloadPathEdit->setText(SettingsManager::sharedInstance()->downloadPath());
-    // m_autoUpdateCheck->setChecked(SettingsManager::sharedInstance()->autoCheckUpdates());
-    // etc...
+    SettingsManager *sm = SettingsManager::sharedInstance();
+
+    m_downloadPathEdit->setText(sm->downloadPath());
+    m_autoUpdateCheck->setChecked(sm->autoCheckUpdates());
+    m_autoRaiseWindow->setChecked(sm->autoRaiseWindow());
+    m_switchToNewDevice->setChecked(sm->switchToNewDevice());
+
+#ifndef __APPLE__
+    m_unmount_iFuseDrives->setChecked(sm->unmountiFuseOnExit());
+#endif
+
+    // Set theme combo box
+    QString currentTheme = sm->theme();
+    int themeIndex = m_themeCombo->findText(currentTheme);
+    if (themeIndex != -1) {
+        m_themeCombo->setCurrentIndex(themeIndex);
+    }
+
+    m_connectionTimeout->setValue(sm->connectionTimeout());
+
+    // Disable apply button initially
+    m_applyButton->setEnabled(false);
 }
 
 void SettingsWidget::connectSignals()
@@ -207,32 +167,18 @@ void SettingsWidget::connectSignals()
     // Connect all checkboxes and combos for immediate feedback
     connect(m_autoUpdateCheck, &QCheckBox::toggled, this,
             &SettingsWidget::onSettingChanged);
+    connect(m_autoRaiseWindow, &QCheckBox::toggled, this,
+            &SettingsWidget::onSettingChanged);
+    connect(m_switchToNewDevice, &QCheckBox::toggled, this,
+            &SettingsWidget::onSettingChanged);
+#ifndef __APPLE__
+    connect(m_unmount_iFuseDrives, &QCheckBox::toggled, this,
+            &SettingsWidget::onSettingChanged);
+#endif
     connect(m_themeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &SettingsWidget::onSettingChanged);
     connect(m_connectionTimeout, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &SettingsWidget::onSettingChanged);
-    connect(m_autoDetectDevices, &QCheckBox::toggled, this,
-            &SettingsWidget::onSettingChanged);
-    connect(m_showDeviceNotifications, &QCheckBox::toggled, this,
-            &SettingsWidget::onSettingChanged);
-    connect(m_autoMountImages, &QCheckBox::toggled, this,
-            &SettingsWidget::onSettingChanged);
-    connect(m_autoDownloadImages, &QCheckBox::toggled, this,
-            &SettingsWidget::onSettingChanged);
-    connect(m_verifySignatures, &QCheckBox::toggled, this,
-            &SettingsWidget::onSettingChanged);
-    connect(m_showHiddenFiles, &QCheckBox::toggled, this,
-            &SettingsWidget::onSettingChanged);
-    connect(m_confirmDeletions, &QCheckBox::toggled, this,
-            &SettingsWidget::onSettingChanged);
-    connect(m_maxDownloads, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsWidget::onSettingChanged);
-    connect(m_enableDebugLogging, &QCheckBox::toggled, this,
-            &SettingsWidget::onSettingChanged);
-    connect(m_logRetention, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &SettingsWidget::onSettingChanged);
-    connect(m_expertMode, &QCheckBox::toggled, this,
-            &SettingsWidget::onSettingChanged);
 }
 
 void SettingsWidget::onBrowseButtonClicked()
@@ -288,20 +234,30 @@ void SettingsWidget::onSettingChanged()
 
 void SettingsWidget::saveSettings()
 {
-    // TODO: Save to SettingsManager
-    // SettingsManager::sharedInstance()->setDownloadPath(m_downloadPathEdit->text());
-    // SettingsManager::sharedInstance()->setAutoCheckUpdates(m_autoUpdateCheck->isChecked());
-    // etc...
+    SettingsManager *sm = SettingsManager::sharedInstance();
+
+    sm->setDownloadPath(m_downloadPathEdit->text());
+    sm->setAutoCheckUpdates(m_autoUpdateCheck->isChecked());
+    sm->setAutoRaiseWindow(m_autoRaiseWindow->isChecked());
+    sm->setSwitchToNewDevice(m_switchToNewDevice->isChecked());
+
+#ifndef __APPLE__
+    sm->setUnmountiFuseOnExit(m_unmount_iFuseDrives->isChecked());
+#endif
+
+    sm->setTheme(m_themeCombo->currentText());
+    sm->setConnectionTimeout(m_connectionTimeout->value());
 
     m_applyButton->setEnabled(false);
 }
 
 void SettingsWidget::resetToDefaults()
 {
-    // TODO: Reset all controls to default values
-    // m_downloadPathEdit->setText(QStandardPaths::writableLocation(QStandardPaths::DownloadLocation));
-    // m_autoUpdateCheck->setChecked(true);
-    // etc...
+    SettingsManager *sm = SettingsManager::sharedInstance();
+    sm->resetToDefaults();
+
+    // Reload UI with default values
+    loadSettings();
 
     onSettingChanged();
 }

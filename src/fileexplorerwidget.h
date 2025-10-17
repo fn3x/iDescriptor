@@ -41,6 +41,9 @@ private:
 
     void setupSidebar();
     void loadFavoritePlaces();
+    void saveFavoritePlace(const QString &alias, const QString &path);
+    void saveFavoritePlaceAfc2(const QString &alias, const QString &path);
+    void onSidebarContextMenuRequested(const QPoint &pos);
 };
 
 #endif // FILEEXPLORERWIDGET_H

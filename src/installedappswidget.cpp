@@ -156,6 +156,8 @@ InstalledAppsWidget::InstalledAppsWidget(iDescriptorDevice *device,
     fetchInstalledApps();
 }
 
+InstalledAppsWidget::~InstalledAppsWidget() { cleanupHouseArrestClients(); }
+
 void InstalledAppsWidget::setupUI()
 {
     m_mainLayout = new QHBoxLayout(this);
@@ -595,6 +597,9 @@ void InstalledAppsWidget::loadAppContainer(const QString &bundleId)
         return;
     }
 
+    // Clean up previous house arrest clients before creating new ones
+    cleanupHouseArrestClients();
+
     // Clear previous container data
     QLayoutItem *item;
     while ((item = m_containerLayout->takeAt(0)) != nullptr) {
@@ -625,7 +630,6 @@ void InstalledAppsWidget::loadAppContainer(const QString &bundleId)
         lockdownd_client_t lockdownClient = nullptr;
         lockdownd_service_descriptor_t lockdowndService = nullptr;
         house_arrest_client_t houseArrestClient = nullptr;
-
         try {
             if (lockdownd_client_new_with_handshake(
                     m_device->device, &lockdownClient, APP_LABEL) !=
@@ -655,9 +659,11 @@ void InstalledAppsWidget::loadAppContainer(const QString &bundleId)
             lockdowndService = nullptr;
 
             // Send vendor container command
-            if (house_arrest_send_command(houseArrestClient, "VendDocuments",
-                                          bundleId.toUtf8().constData()) !=
-                HOUSE_ARREST_E_SUCCESS) {
+            if (house_arrest_send_command(
+                    houseArrestClient, "VendDocuments",
+                    // if (house_arrest_send_command(houseArrestClient,
+                    // "VendDocuments",
+                    bundleId.toUtf8().constData()) != HOUSE_ARREST_E_SUCCESS) {
                 result["error"] = "Could not send VendDocuments command";
                 house_arrest_client_free(houseArrestClient);
                 lockdownd_client_free(lockdownClient);
@@ -707,7 +713,8 @@ void InstalledAppsWidget::loadAppContainer(const QString &bundleId)
 
             // List root directory contents
             char **list = nullptr;
-            if (afc_read_directory(afcClient, "/", &list) != AFC_E_SUCCESS) {
+            if (afc_read_directory(afcClient, "/Documents", &list) !=
+                AFC_E_SUCCESS) {
                 result["error"] = "Could not read app container directory";
                 afc_client_free(afcClient);
                 house_arrest_client_free(houseArrestClient);
@@ -720,12 +727,12 @@ void InstalledAppsWidget::loadAppContainer(const QString &bundleId)
                 for (int i = 0; list[i]; i++) {
                     QString fileName = QString::fromUtf8(list[i]);
                     if (fileName != "." && fileName != "..") {
+                        qDebug() << "Found file:" << fileName;
                         files.append(fileName);
                     }
                 }
                 afc_dictionary_free(list);
             }
-            qDebug() << "App container files:" << files;
             result["files"] = files;
             result["afcClient"] =
                 QVariant::fromValue(reinterpret_cast<void *>(afcClient));
@@ -733,9 +740,6 @@ void InstalledAppsWidget::loadAppContainer(const QString &bundleId)
                 reinterpret_cast<void *>(houseArrestClient));
             result["success"] = true;
 
-            // Don't free the clients here - they will be used by
-            // AfcExplorerWidget afc_client_free(afcClient);
-            // house_arrest_client_free(houseArrestClient);
             lockdownd_client_free(lockdownClient);
 
         } catch (const std::exception &e) {
@@ -761,6 +765,7 @@ void InstalledAppsWidget::onContainerDataReady()
 {
     QVariantMap result = m_containerWatcher->result();
 
+    // todo
     // Clear loading state
     QLayoutItem *item;
     while ((item = m_containerLayout->takeAt(0)) != nullptr) {
@@ -779,11 +784,13 @@ void InstalledAppsWidget::onContainerDataReady()
         return;
     }
 
-    // Get the AFC clients from the result
-    afc_client_t afcClient = reinterpret_cast<afc_client_t>(
+    // Get the AFC clients from the result and store them as member variables
+    m_houseArrestAfcClient = reinterpret_cast<afc_client_t>(
         result.value("afcClient").value<void *>());
+    m_houseArrestClient = reinterpret_cast<house_arrest_client_t>(
+        result.value("houseArrestClient").value<void *>());
 
-    if (!afcClient) {
+    if (!m_houseArrestAfcClient) {
         QLabel *errorLabel =
             new QLabel("Failed to get AFC client for app container");
         m_containerLayout->addWidget(errorLabel);
@@ -791,9 +798,8 @@ void InstalledAppsWidget::onContainerDataReady()
     }
 
     // Create AfcExplorerWidget with the house arrest AFC client
-    // todo:afcClient never gets freed
-    AfcExplorerWidget *explorer =
-        new AfcExplorerWidget(afcClient, []() {}, m_device, this);
+    AfcExplorerWidget *explorer = new AfcExplorerWidget(
+        m_device, true, m_houseArrestAfcClient, "/Documents", this);
     explorer->setStyleSheet("border :none;");
     m_containerLayout->addWidget(explorer);
 }
@@ -803,6 +809,19 @@ void InstalledAppsWidget::onFileSharingFilterChanged(bool enabled)
     Q_UNUSED(enabled)
     // Refresh the apps list when filter changes
     fetchInstalledApps();
+}
+
+void InstalledAppsWidget::cleanupHouseArrestClients()
+{
+    if (m_houseArrestAfcClient) {
+        afc_client_free(m_houseArrestAfcClient);
+        m_houseArrestAfcClient = nullptr;
+    }
+
+    if (m_houseArrestClient) {
+        house_arrest_client_free(m_houseArrestClient);
+        m_houseArrestClient = nullptr;
+    }
 }
 
 void InstalledAppsWidget::createLeftPanel()

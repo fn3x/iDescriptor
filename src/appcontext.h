@@ -14,7 +14,6 @@ public:
     iDescriptorDevice *getDevice(const std::string &udid);
     QList<iDescriptorDevice *> getAllDevices();
     explicit AppContext(QObject *parent = nullptr);
-    void handleDBusSignal(const QDBusMessage &msg);
     bool noDevicesConnected() const;
 
     // Returns whether there are any devices connected (regular or recovery)

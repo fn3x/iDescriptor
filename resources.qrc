@@ -15,6 +15,8 @@
         <file>resources/icons/MaterialSymbolsLightKeyboardReturn.png</file>
         <file>resources/icons/MaterialSymbolsFavorite.png</file>
         <file>resources/icons/MdiLightMagnify.png</file>
+        <file>resources/icons/IcBaselineInsertDriveFile.png</file>
+        <file>resources/icons/MaterialSymbolsLightHome.png</file>
         <!-- <file>resources/icons/icon.png</file> -->
         <file>qml/MapView.qml</file>
         <!-- TODO: -->

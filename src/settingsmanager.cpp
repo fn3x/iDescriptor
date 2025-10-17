@@ -2,6 +2,7 @@
 #include "settingswidget.h"
 #include <QDebug>
 #include <QSettings>
+#include <QStandardPaths>
 
 #define DEFAULT_DEVDISKIMGPATH "./devdiskimages"
 
@@ -33,38 +34,160 @@ SettingsManager::SettingsManager(QObject *parent) : QObject{parent}
     m_settings = new QSettings(this);
 
     // Clean up any invalid favorite places on startup
-    cleanupFavoritePlaces();
+    // cleanupFavoritePlaces();
 }
 
 QString SettingsManager::devdiskimgpath() const
 {
-    return m_settings->value("devdiskimgpath", DEFAULT_DEVDISKIMGPATH)
-        .toString();
+    return downloadPath(); // Use the new downloadPath method
+}
+
+// Settings implementation
+QString SettingsManager::downloadPath() const
+{
+    return m_settings->value("downloadPath", DEFAULT_DEVDISKIMGPATH).toString();
+}
+
+void SettingsManager::setDownloadPath(const QString &path)
+{
+    m_settings->setValue("downloadPath", path);
+    m_settings->sync();
+}
+
+bool SettingsManager::autoCheckUpdates() const
+{
+    return m_settings->value("autoCheckUpdates", true).toBool();
+}
+
+void SettingsManager::setAutoCheckUpdates(bool enabled)
+{
+    m_settings->setValue("autoCheckUpdates", enabled);
+    m_settings->sync();
+}
+
+bool SettingsManager::autoRaiseWindow() const
+{
+    return m_settings->value("autoRaiseWindow", true).toBool();
+}
+
+void SettingsManager::setAutoRaiseWindow(bool enabled)
+{
+    m_settings->setValue("autoRaiseWindow", enabled);
+    m_settings->sync();
+}
+
+bool SettingsManager::switchToNewDevice() const
+{
+    return m_settings->value("switchToNewDevice", true).toBool();
+}
+
+void SettingsManager::setSwitchToNewDevice(bool enabled)
+{
+    m_settings->setValue("switchToNewDevice", enabled);
+    m_settings->sync();
+}
+
+#ifndef __APPLE__
+bool SettingsManager::unmountiFuseOnExit() const
+{
+    return m_settings->value("unmountiFuseOnExit", true).toBool();
+}
+
+void SettingsManager::setUnmountiFuseOnExit(bool enabled)
+{
+    m_settings->setValue("unmountiFuseOnExit", enabled);
+    m_settings->sync();
+}
+#endif
+
+QString SettingsManager::theme() const
+{
+    return m_settings->value("theme", "System Default").toString();
+}
+
+void SettingsManager::setTheme(const QString &theme)
+{
+    m_settings->setValue("theme", theme);
+    m_settings->sync();
+}
+
+int SettingsManager::connectionTimeout() const
+{
+    return m_settings->value("connectionTimeout", 30).toInt();
+}
+
+void SettingsManager::setConnectionTimeout(int seconds)
+{
+    m_settings->setValue("connectionTimeout", seconds);
+    m_settings->sync();
+}
+
+void SettingsManager::doIfEnabled(Setting setting, std::function<void()> action)
+{
+    bool shouldExecute = false;
+
+    switch (setting) {
+    case Setting::AutoRaiseWindow:
+        shouldExecute = autoRaiseWindow();
+        break;
+    case Setting::SwitchToNewDevice:
+        shouldExecute = switchToNewDevice();
+        break;
+    case Setting::AutoCheckUpdates:
+        shouldExecute = autoCheckUpdates();
+        break;
+#ifndef __APPLE__
+    case Setting::UnmountiFuseOnExit:
+        shouldExecute = unmountiFuseOnExit();
+        break;
+#endif
+    default:
+        qWarning() << "Unhandled setting in doIfEnabled";
+        return;
+    }
+
+    if (shouldExecute && action) {
+        action();
+    }
+}
+
+void SettingsManager::resetToDefaults()
+{
+    setDownloadPath(DEFAULT_DEVDISKIMGPATH);
+    setAutoCheckUpdates(true);
+    setAutoRaiseWindow(true);
+    setSwitchToNewDevice(true);
+#ifndef __APPLE__
+    setUnmountiFuseOnExit(true);
+#endif
+    setTheme("System Default");
+    setConnectionTimeout(30);
 }
 
 void SettingsManager::saveFavoritePlace(const QString &path,
-                                        const QString &alias)
+                                        const QString &alias,
+                                        const QString &keyPrefix)
 {
     if (path.isEmpty() || alias.isEmpty()) {
-        qDebug() << "Cannot save favorite place: path or alias is empty";
+        qWarning() << "Cannot save favorite place with empty path or alias";
         return;
     }
 
     // Use a key that encodes the path properly
-    QString key =
-        "favorite_places/" + QString::fromLatin1(path.toUtf8().toBase64());
+    QString key = keyPrefix + QString::fromLatin1(path.toUtf8().toBase64());
     m_settings->setValue(key, QStringList() << path << alias);
     m_settings->sync();
 
-    qDebug() << "Saved favorite place:" << alias << "(" << path << ")";
+    qDebug() << "Saved favorite place (AFC2):" << alias << "(" << path << ")";
     emit favoritePlacesChanged();
 }
 
-void SettingsManager::removeFavoritePlace(const QString &path)
+void SettingsManager::removeFavoritePlace(const QString &keyPrefix,
+                                          const QString &path)
 {
     // Use the same encoding as in saveFavoritePlace
-    QString key =
-        "favorite_places/" + QString::fromLatin1(path.toUtf8().toBase64());
+    QString key = keyPrefix + QString::fromLatin1(path.toUtf8().toBase64());
+    qDebug() << "Attempting to remove favorite place with key:" << key;
     if (m_settings->contains(key)) {
         m_settings->remove(key);
         m_settings->sync();
@@ -73,13 +196,14 @@ void SettingsManager::removeFavoritePlace(const QString &path)
     }
 }
 
-QList<QPair<QString, QString>> SettingsManager::getFavoritePlaces() const
+QList<QPair<QString, QString>>
+SettingsManager::getFavoritePlaces(const QString &keyPrefix) const
 {
     QList<QPair<QString, QString>> favorites;
 
-    // Get all keys that start with "favorite_places/"
+    // Get all keys that start with the specified prefix
     QStringList allKeys = m_settings->allKeys();
-    QStringList favoriteKeys = allKeys.filter("favorite_places/");
+    QStringList favoriteKeys = allKeys.filter(keyPrefix);
 
     qDebug() << "Found favorite keys:" << favoriteKeys;
 
@@ -105,29 +229,10 @@ QList<QPair<QString, QString>> SettingsManager::getFavoritePlaces() const
     return favorites;
 }
 
-bool SettingsManager::isFavoritePlace(const QString &path) const
+void SettingsManager::clearKeys(const QString &keyPrefix)
 {
-    QString key =
-        "favorite_places/" + QString::fromLatin1(path.toUtf8().toBase64());
-    return m_settings->contains(key);
-}
-
-QString SettingsManager::getFavoritePlaceAlias(const QString &path) const
-{
-    QString key =
-        "favorite_places/" + QString::fromLatin1(path.toUtf8().toBase64());
-    QStringList value = m_settings->value(key).toStringList();
-    if (value.size() >= 2) {
-        return value[1]; // Return alias
-    }
-    return QString();
-}
-
-void SettingsManager::clearFavoritePlaces()
-{
-    // Get all keys that start with "favorite_places/" and remove them
     QStringList allKeys = m_settings->allKeys();
-    QStringList favoriteKeys = allKeys.filter("favorite_places/");
+    QStringList favoriteKeys = allKeys.filter(keyPrefix);
 
     for (const QString &key : favoriteKeys) {
         m_settings->remove(key);
@@ -135,31 +240,5 @@ void SettingsManager::clearFavoritePlaces()
 
     m_settings->sync();
 
-    qDebug() << "Cleared all favorite places";
     emit favoritePlacesChanged();
-}
-
-void SettingsManager::cleanupFavoritePlaces()
-{
-    // Get all keys that start with "favorite_places/" and clean them up
-    QStringList allKeys = m_settings->allKeys();
-    QStringList favoriteKeys = allKeys.filter("favorite_places/");
-    QStringList keysToRemove;
-
-    for (const QString &key : favoriteKeys) {
-        QStringList value = m_settings->value(key).toStringList();
-        if (value.size() < 2 || value[0].isEmpty() || value[1].isEmpty()) {
-            keysToRemove.append(key);
-        }
-    }
-
-    for (const QString &key : keysToRemove) {
-        qDebug() << "Removing invalid favorite place key:" << key;
-        m_settings->remove(key);
-    }
-
-    if (!keysToRemove.isEmpty()) {
-        m_settings->sync();
-        emit favoritePlacesChanged();
-    }
 }

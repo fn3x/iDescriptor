@@ -12,21 +12,13 @@ class QHBoxLayout;
 class QVBoxLayout;
 class QStackedWidget;
 class QLabel;
+class QStandardItem;
 QT_END_NAMESPACE
 
 class PhotoModel;
-class PhotoExportManager;
+class ExportManager;
+class ExportProgressDialog;
 
-/**
- * @brief Widget for displaying a gallery of photos and videos from iOS devices
- *
- * Features:
- * - Lazy loading when tab becomes active
- * - Thumbnail generation with caching
- * - Support for images (JPG, PNG, HEIC) and videos (MOV, MP4, M4V)
- * - Double-click to open media preview dialog
- * - Responsive grid layout
- */
 class GalleryWidget : public QWidget
 {
     Q_OBJECT
@@ -52,6 +44,9 @@ private:
     void loadAlbumList();
     void setControlsEnabled(bool enabled);
     QString selectExportDirectory();
+    QIcon loadAlbumThumbnail(const QString &albumPath);
+    void loadAlbumThumbnailAsync(const QString &albumPath, QStandardItem *item);
+    void onPhotoContextMenu(const QPoint &pos);
 
     iDescriptorDevice *m_device;
     bool m_loaded = false;
@@ -79,7 +74,8 @@ private:
     QPushButton *m_backButton;
 
     // Export manager
-    PhotoExportManager *m_exportManager;
+    ExportManager *m_exportManager;
+    ExportProgressDialog *m_exportProgressDialog;
 };
 
 #endif // GALLERYWIDGET_H

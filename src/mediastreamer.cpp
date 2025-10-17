@@ -18,7 +18,6 @@ MediaStreamer::MediaStreamer(iDescriptorDevice *device, afc_client_t afcClient,
       m_filePath(filePath), m_cachedFileSize(-1), m_fileSizeCached(false)
 {
     // Listen on localhost with automatic port assignment
-    // todo: use qhostadress::localhost for jailbroken widget
     if (!listen(QHostAddress::LocalHost, 0)) {
         qWarning() << "MediaStreamer failed to start:" << errorString();
     } else {
@@ -262,7 +261,8 @@ void MediaStreamer::streamFileRange(QTcpSocket *socket, qint64 startByte,
     // Open file on device using ServiceManager
     const QByteArray pathBytes = m_filePath.toUtf8();
     afc_error_t openResult = ServiceManager::safeAfcFileOpen(
-        m_device, pathBytes.constData(), AFC_FOPEN_RDONLY, &context->afcHandle);
+        m_device, pathBytes.constData(), AFC_FOPEN_RDONLY, &context->afcHandle,
+        m_afcClient);
 
     if (openResult != AFC_E_SUCCESS || context->afcHandle == 0) {
         qWarning() << "Failed to open file on device:" << m_filePath;
@@ -274,10 +274,11 @@ void MediaStreamer::streamFileRange(QTcpSocket *socket, qint64 startByte,
     // Seek to start position if needed
     if (startByte > 0) {
         afc_error_t seekResult = ServiceManager::safeAfcFileSeek(
-            m_device, context->afcHandle, startByte, SEEK_SET);
+            m_device, context->afcHandle, startByte, SEEK_SET, m_afcClient);
         if (seekResult != AFC_E_SUCCESS) {
             qWarning() << "Failed to seek in file:" << m_filePath;
-            ServiceManager::safeAfcFileClose(m_device, context->afcHandle);
+            ServiceManager::safeAfcFileClose(m_device, context->afcHandle,
+                                             m_afcClient);
             delete context;
             socket->disconnectFromHost();
             return;
@@ -334,7 +335,7 @@ qint64 MediaStreamer::getFileSize()
     char **info = nullptr;
     const QByteArray pathBytes = m_filePath.toUtf8();
     afc_error_t result = ServiceManager::safeAfcGetFileInfo(
-        m_device, pathBytes.constData(), &info);
+        m_device, pathBytes.constData(), &info, m_afcClient);
 
     if (result != AFC_E_SUCCESS || !info) {
         qWarning() << "Failed to get file info for:" << m_filePath;
@@ -411,7 +412,8 @@ void MediaStreamer::streamNextChunk(StreamingContext *context)
     uint32_t bytesRead = 0;
 
     afc_error_t readResult = ServiceManager::safeAfcFileRead(
-        m_device, context->afcHandle, buffer.get(), bytesToRead, &bytesRead);
+        m_device, context->afcHandle, buffer.get(), bytesToRead, &bytesRead,
+        m_afcClient);
 
     if (readResult != AFC_E_SUCCESS || bytesRead == 0) {
         qWarning() << "AFC read error or EOF during streaming";
@@ -468,7 +470,8 @@ void MediaStreamer::cleanupStreamingContext(StreamingContext *context)
     }
 
     if (context->afcHandle != 0) {
-        ServiceManager::safeAfcFileClose(context->device, context->afcHandle);
+        ServiceManager::safeAfcFileClose(context->device, context->afcHandle,
+                                         m_afcClient);
         context->afcHandle = 0;
     }
 

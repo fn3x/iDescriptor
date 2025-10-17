@@ -3,6 +3,7 @@
 #include "devicemenuwidget.h"
 #include "devicependingwidget.h"
 #include "recoverydeviceinfowidget.h"
+#include "settingsmanager.h"
 #include <QDebug>
 
 DeviceManagerWidget::DeviceManagerWidget(QWidget *parent)
@@ -13,7 +14,12 @@ DeviceManagerWidget::DeviceManagerWidget(QWidget *parent)
     connect(AppContext::sharedInstance(), &AppContext::deviceAdded, this,
             [this](iDescriptorDevice *device) {
                 addDevice(device);
-                setCurrentDevice(device->udid);
+
+                // Apply settings-based behavior for switching to new device
+                SettingsManager::sharedInstance()->doIfEnabled(
+                    SettingsManager::Setting::SwitchToNewDevice,
+                    [this, device]() { setCurrentDevice(device->udid); });
+
                 emit updateNoDevicesConnected();
             });
 

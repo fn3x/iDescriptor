@@ -185,7 +185,7 @@ void DevDiskImagesWidget::displayImages()
     int deviceMajorVersion = 0;
     int deviceMinorVersion = 0;
     bool hasConnectedDevice = false;
-
+    // todo wtf is this
     if (m_currentDevice && m_currentDevice->device) {
         unsigned int device_version =
             idevice_get_device_version(m_currentDevice->device);
@@ -197,26 +197,31 @@ void DevDiskImagesWidget::displayImages()
     qDebug() << "Device version:" << deviceMajorVersion << "."
              << deviceMinorVersion << "displayImages";
     // Parse images using manager
-    GetImagesSortedFinalResult sortedResult =
+    QList<ImageInfo> allImages =
         DevDiskManager::sharedInstance()->parseImageList(
             deviceMajorVersion, deviceMinorVersion, m_mounted_sig.c_str(),
             m_mounted_sig_len);
 
-    auto compatibleImages = sortedResult.compatibleImages;
-    auto otherImages = sortedResult.otherImages;
+    qDebug() << "Total images:" << allImages.size();
 
-    qDebug() << "Compatible images:" << compatibleImages.size();
-    qDebug() << "Other images:" << otherImages.size();
-
-    // Create UI items - compatible versions first
-    auto createVersionItem = [&](const ImageInfo &info, bool isCompatible) {
+    // Create UI items
+    auto createVersionItem = [&](const ImageInfo &info) {
+        bool isCompatible =
+            (info.compatibility == ImageCompatibility::Compatible ||
+             info.compatibility == ImageCompatibility::MaybeCompatible);
         auto *itemWidget = new QWidget();
         auto *itemLayout = new QHBoxLayout(itemWidget);
 
         auto *versionLabel = new QLabel(info.version);
         if (isCompatible) {
-            versionLabel->setStyleSheet(
-                "QLabel { font-weight: bold; color: #2E7D32; }");
+            if (info.compatibility == ImageCompatibility::Compatible) {
+                versionLabel->setStyleSheet(
+                    "QLabel { font-weight: bold; color: #2E7D32; }");
+            } else if (info.compatibility ==
+                       ImageCompatibility::MaybeCompatible) {
+                versionLabel->setStyleSheet(
+                    "QLabel { font-weight: bold; color: #F57C00; }");
+            }
         }
         itemLayout->addWidget(versionLabel);
 
@@ -228,11 +233,18 @@ void DevDiskImagesWidget::displayImages()
                     mountedLabel->setStyleSheet(
                         "QLabel { color: #1565C0; font-weight: bold; }");
                     itemLayout->addWidget(mountedLabel);
+                } else if (info.compatibility ==
+                           ImageCompatibility::MaybeCompatible) {
+                    auto *maybeLabel = new QLabel("⚠ Maybe compatible");
+                    maybeLabel->setStyleSheet("QLabel { color: #F57C00; "
+                                              "margin-left: 10px; font-weight: "
+                                              "bold; }");
+                    itemLayout->addWidget(maybeLabel);
                 }
             } else {
                 auto *incompatLabel = new QLabel("⚠ Not compatible");
                 incompatLabel->setStyleSheet(
-                    "QLabel { color: #F57C00; margin-left: 10px; font-weight: "
+                    "QLabel { color: #D32F2F; margin-left: 10px; font-weight: "
                     "bold; }");
                 itemLayout->addWidget(incompatLabel);
             }
@@ -257,28 +269,41 @@ void DevDiskImagesWidget::displayImages()
         m_imageListWidget->setItemWidget(listItem, itemWidget);
     };
 
-    // Add compatible versions first
-    for (const auto &info : compatibleImages) {
-        createVersionItem(info, true);
-    }
+    bool hasCompatibleImages = false;
+    bool hasOtherImages = false;
+    bool separatorAdded = false;
 
-    // Add separator if we have both compatible and other versions
-    if (!compatibleImages.isEmpty() && !otherImages.isEmpty()) {
-        auto *separatorItem = new QListWidgetItem(m_imageListWidget);
-        auto *separatorWidget = new QWidget();
-        auto *separatorLayout = new QHBoxLayout(separatorWidget);
-        auto *separatorLabel = new QLabel("Other versions");
-        separatorLabel->setStyleSheet(
-            "QLabel { font-weight: bold; color: #757575; margin: 10px 0; }");
-        separatorLayout->addWidget(separatorLabel);
-        separatorItem->setSizeHint(separatorWidget->sizeHint());
-        m_imageListWidget->addItem(separatorItem);
-        m_imageListWidget->setItemWidget(separatorItem, separatorWidget);
-    }
+    // Add all images, inserting separator when transitioning from compatible to
+    // not compatible
+    for (const auto &info : allImages) {
+        bool isCompatible =
+            (info.compatibility == ImageCompatibility::Compatible ||
+             info.compatibility == ImageCompatibility::MaybeCompatible);
 
-    // Add other versions
-    for (const auto &info : otherImages) {
-        createVersionItem(info, false);
+        if (isCompatible) {
+            hasCompatibleImages = true;
+        } else {
+            hasOtherImages = true;
+            // Add separator before first non-compatible image if we have
+            // compatible ones
+            if (hasCompatibleImages && !separatorAdded) {
+                auto *separatorItem = new QListWidgetItem(m_imageListWidget);
+                auto *separatorWidget = new QWidget();
+                auto *separatorLayout = new QHBoxLayout(separatorWidget);
+                auto *separatorLabel = new QLabel("Other versions");
+                separatorLabel->setStyleSheet(
+                    "QLabel { font-weight: bold; color: #757575; margin: 10px "
+                    "0; }");
+                separatorLayout->addWidget(separatorLabel);
+                separatorItem->setSizeHint(separatorWidget->sizeHint());
+                m_imageListWidget->addItem(separatorItem);
+                m_imageListWidget->setItemWidget(separatorItem,
+                                                 separatorWidget);
+                separatorAdded = true;
+            }
+        }
+
+        createVersionItem(info);
     }
 
     // Show device info if available
@@ -351,7 +376,7 @@ void DevDiskImagesWidget::startDownload(const QString &version)
         progressBar->setVisible(false);
         return;
     }
-
+    // todo is this safe ?
     auto *downloadItem = new DownloadItem();
     downloadItem->version = version;
     downloadItem->progressBar = progressBar;

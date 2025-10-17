@@ -3,6 +3,7 @@
 
 #include "appstoremanager.h"
 #include "qprocessindicator.h"
+#include <QAction>
 #include <QComboBox>
 #include <QDialog>
 #include <QFile>
@@ -66,6 +67,7 @@ private:
     // Search
     QLineEdit *m_searchEdit;
     QTimer *m_debounceTimer;
+    QAction *m_searchAction;
 };
 
 #endif // APPSWIDGET_H

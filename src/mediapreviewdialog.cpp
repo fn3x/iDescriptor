@@ -24,7 +24,7 @@
 #include <QWheelEvent>
 #include <QtConcurrent/QtConcurrent>
 #include <QtGlobal>
-// todo : need to pass afc as well
+
 MediaPreviewDialog::MediaPreviewDialog(iDescriptorDevice *device,
                                        afc_client_t afcClient,
                                        const QString &filePath, QWidget *parent)
@@ -51,10 +51,6 @@ MediaPreviewDialog::MediaPreviewDialog(iDescriptorDevice *device,
     const QSize screenSize = QApplication::primaryScreen()->size();
     resize(screenSize);
 
-    // Add window transparency
-    // looks way too bad on linux - maybe enable only on macOS and Windows
-    // setAttribute(Qt::WA_TranslucentBackground);
-
     setupUI();
     loadMedia();
 }
@@ -65,8 +61,6 @@ MediaPreviewDialog::~MediaPreviewDialog()
     if (m_isVideo) {
         MediaStreamerManager::sharedInstance()->releaseStreamer(m_filePath);
     }
-
-    // Cleanup is handled by Qt's parent-child system
 }
 
 void MediaPreviewDialog::setupUI()
@@ -214,6 +208,7 @@ void MediaPreviewDialog::loadVideo()
     // Get streamer URL from the singleton manager
     QUrl streamUrl = MediaStreamerManager::sharedInstance()->getStreamUrl(
         m_device, m_afcClient, m_filePath);
+    qDebug() << "Streaming video from URL:" << streamUrl;
     if (streamUrl.isEmpty()) {
         m_statusLabel->setText("Failed to start video stream");
         return;
@@ -721,6 +716,7 @@ void MediaPreviewDialog::onVolumeChanged(int value)
 
 bool MediaPreviewDialog::event(QEvent *event)
 {
+    // FIXME: lets implement this on all dialogs
     // catch platform Close (Cmd+W on macOS)
     if (event->type() == QEvent::ShortcutOverride) {
         if (auto *ke = dynamic_cast<QKeyEvent *>(event)) {

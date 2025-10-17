@@ -48,14 +48,10 @@ void parseOldDeviceBattery(PlistNavigator &ioreg, DeviceInfo &d)
         ioreg["AppleRawCurrentCapacity"].getUInt();
     uint64_t appleRawMaxCapacity = ioreg["AppleRawMaxCapacity"].getUInt();
 
-    qDebug() << "appleRawCurrentCapacity" << appleRawCurrentCapacity;
-    qDebug() << "appleRawMaxCapacity" << appleRawMaxCapacity;
-
     uint64_t oldCurrrentBatteryLevel =
         (appleRawCurrentCapacity && appleRawMaxCapacity)
             ? (appleRawCurrentCapacity * 100 / appleRawMaxCapacity)
             : 0;
-    qDebug() << "oldCurrrentBatteryLevel" << oldCurrrentBatteryLevel;
 
     d.batteryInfo.currentBatteryLevel = oldCurrrentBatteryLevel;
 
@@ -103,8 +99,20 @@ void parseDeviceBattery(PlistNavigator &ioreg, DeviceInfo &d)
 
     d.batteryInfo.fullyCharged = ioreg["FullyCharged"].getBool();
 
-    d.batteryInfo.currentBatteryLevel =
-        ioreg["BatteryData"]["StateOfCharge"].getUInt();
+    /* data is stale here so we need to calculate */
+    // d.batteryInfo.currentBatteryLevel =
+    //     ioreg["BatteryData"]["StateOfCharge"].getUInt();
+
+    uint64_t appleRawCurrentCapacity =
+        ioreg["AppleRawCurrentCapacity"].getUInt();
+    uint64_t appleRawMaxCapacity = ioreg["AppleRawMaxCapacity"].getUInt();
+
+    uint64_t currentBatteryLevel =
+        (appleRawCurrentCapacity && appleRawMaxCapacity)
+            ? (appleRawCurrentCapacity * 100 / appleRawMaxCapacity)
+            : 0;
+
+    d.batteryInfo.currentBatteryLevel = currentBatteryLevel;
 
     d.batteryInfo.usbConnectionType =
         ioreg["AdapterDetails"]["Description"].getString() == "usb type-c"
@@ -118,7 +126,6 @@ void parseDeviceBattery(PlistNavigator &ioreg, DeviceInfo &d)
     d.batteryInfo.watts = ioreg["AppleRawAdapterDetails"][0]["Watts"].getUInt();
 }
 
-// TODO: return tyype
 DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
                           afc_client_t &afcClient,
                           iDescriptorInitDeviceResult &result)
@@ -173,8 +180,30 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
             std::stoull(safeGet("TotalDataCapacity"));
         d.diskInfo.totalSystemCapacity =
             std::stoull(safeGet("TotalSystemCapacity"));
+        /*
+            For some reason this is way inaccrutate for iOS 17 and up
+        */
         d.diskInfo.totalDataAvailable =
             std::stoull(safeGet("TotalDataAvailable"));
+
+        try {
+            /*
+                Example : this data seems to be the most accurate
+            */
+            //"Model: iPhone12,8"
+            // "FSTotalBytes: 63966400512"
+            // "FSFreeBytes: 2867101696"
+            // "FSBlockSize: 4096"
+            char **info = NULL;
+            afc_get_device_info(afcClient, &info);
+            if (info && info[6]) {
+                d.diskInfo.totalDataAvailable =
+                    std::stoull(std::string(info[5]));
+            }
+            afc_dictionary_free(info);
+        } catch (const std::exception &e) {
+            qDebug() << "Error parsing disk info: " << e.what();
+        }
     } catch (const std::exception &e) {
         qDebug() << e.what();
         /*It's ok if any of those fails*/
@@ -209,6 +238,7 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
     d.productType =
         info ? info->displayName ? info->displayName : info->marketingName
              : "Unknown Device";
+    d.marketingName = info ? info->marketingName : "Unknown Device";
     d.rawProductType = rawProductType;
     d.jailbroken = detect_jailbroken(afcClient);
     d.is_iPhone = safeGet("DeviceClass") == "iPhone";

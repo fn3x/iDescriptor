@@ -1,4 +1,5 @@
 #include "afcexplorerwidget.h"
+#include "exportmanager.h"
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "mediapreviewdialog.h"
@@ -18,6 +19,7 @@
 #include <QScrollBar>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QStyle>
 #include <QTemporaryDir>
 #include <QTreeWidget>
@@ -25,14 +27,12 @@
 #include <libimobiledevice/afc.h>
 #include <libimobiledevice/libimobiledevice.h>
 
-AfcExplorerWidget::AfcExplorerWidget(afc_client_t afcClient,
-                                     std::function<void()> onClientInvalidCb,
-                                     iDescriptorDevice *device, QWidget *parent)
-    : QWidget(parent), m_currentAfcClient(afcClient), m_device(device)
+AfcExplorerWidget::AfcExplorerWidget(iDescriptorDevice *device, bool favEnabled,
+                                     afc_client_t afcClient, QString root,
+                                     QWidget *parent)
+    : QWidget(parent), m_device(device), m_favEnabled(favEnabled),
+      m_afc(afcClient), m_errorMessage("Failed to load directory"), m_root(root)
 {
-    // Initialize current AFC client to default
-    m_currentAfcClient = afcClient;
-
     // Setup file explorer
     setupFileExplorer();
 
@@ -44,10 +44,10 @@ AfcExplorerWidget::AfcExplorerWidget(afc_client_t afcClient,
     mainLayout->addWidget(m_explorer);
 
     // Initialize
-    m_history.push("/");
+    m_history.push(m_root);
     m_currentHistoryIndex = 0;
     m_forwardHistory.clear();
-    loadPath("/");
+    loadPath(m_root);
 
     setupContextMenu();
 }
@@ -61,7 +61,6 @@ void AfcExplorerWidget::goBack()
 
         QString prevPath = m_history.top();
         loadPath(prevPath);
-        updateNavigationButtons();
     }
 }
 
@@ -71,7 +70,6 @@ void AfcExplorerWidget::goForward()
         QString forwardPath = m_forwardHistory.pop();
         m_history.push(forwardPath);
         loadPath(forwardPath);
-        updateNavigationButtons();
     }
 }
 
@@ -95,7 +93,6 @@ void AfcExplorerWidget::onItemDoubleClicked(QListWidgetItem *item)
         m_forwardHistory.clear();
         m_history.push(nextPath);
         loadPath(nextPath);
-        updateNavigationButtons();
     } else {
         const QString lowerFileName = name.toLower();
         const bool isPreviewable =
@@ -106,34 +103,38 @@ void AfcExplorerWidget::onItemDoubleClicked(QListWidgetItem *item)
             lowerFileName.endsWith(".gif") || lowerFileName.endsWith(".bmp");
 
         if (isPreviewable) {
-            auto *previewDialog = new MediaPreviewDialog(
-                m_device, m_currentAfcClient, nextPath, this);
+            auto *previewDialog =
+                new MediaPreviewDialog(m_device, m_afc, nextPath, this);
             previewDialog->setAttribute(Qt::WA_DeleteOnClose);
             previewDialog->show();
-            // TODO: we need this ?
-            emit fileSelected(nextPath);
         } else {
-            // TODO: maybe delete in deconstructor
-            QTemporaryDir *tempDir = new QTemporaryDir();
-            if (tempDir->isValid()) {
-                qDebug() << "Created temp dir:" << tempDir->path();
-                QString localPath = tempDir->path() + "/" + name;
-                int result = export_file_to_path(
-                    m_currentAfcClient, nextPath.toUtf8().constData(),
-                    localPath.toUtf8().constData());
-                qDebug() << "Export result:" << result << "to" << localPath;
-                if (result == 0) {
-                    QDesktopServices::openUrl(QUrl::fromLocalFile(localPath));
-                } else {
-                    QMessageBox::warning(
-                        this, "Export Failed",
-                        "Could not export the file from the device.");
-                }
-            } else {
-                QMessageBox::critical(
-                    this, "Error", "Could not create a temporary directory.");
-            }
+            openWithDesktopService(nextPath, name);
         }
+    }
+}
+
+void AfcExplorerWidget::openWithDesktopService(const QString &devicePath,
+                                               const QString &fileName)
+{
+    QTemporaryDir *tempDir = new QTemporaryDir();
+    if (!tempDir->isValid()) {
+        QMessageBox::critical(this, "Error",
+                              "Could not create a temporary directory.");
+        delete tempDir;
+        return;
+    }
+
+    QString localPath = tempDir->path() + "/" + fileName;
+    int result = exportFileToPath(m_afc, devicePath.toUtf8().constData(),
+                                  localPath.toUtf8().constData());
+
+    if (result == 0) {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(localPath));
+        // TODO: Clean up tempDir in destructor or keep a list of temp dirs
+    } else {
+        QMessageBox::warning(this, "Export Failed",
+                             "Could not export the file from the device.");
+        delete tempDir;
     }
 }
 
@@ -158,7 +159,6 @@ void AfcExplorerWidget::onAddressBarReturnPressed()
     // Update history and load the path
     m_history.push(path);
     loadPath(path);
-    updateNavigationButtons();
 }
 
 void AfcExplorerWidget::updateNavigationButtons()
@@ -170,6 +170,10 @@ void AfcExplorerWidget::updateNavigationButtons()
     if (m_forwardButton) {
         m_forwardButton->setEnabled(!m_forwardHistory.isEmpty());
     }
+    if (m_upButton) {
+        bool canGoUp = !m_history.isEmpty() && m_history.top() != "/";
+        m_upButton->setEnabled(canGoUp);
+    }
 }
 
 void AfcExplorerWidget::updateAddressBar(const QString &path)
@@ -180,16 +184,19 @@ void AfcExplorerWidget::updateAddressBar(const QString &path)
 
 void AfcExplorerWidget::loadPath(const QString &path)
 {
-    m_fileList->clear();
-
     updateAddressBar(path);
+    updateNavigationButtons();
 
     AFCFileTree tree =
-        ServiceManager::safeGetFileTree(m_device, path.toStdString());
+        ServiceManager::safeGetFileTree(m_device, path.toStdString(), m_afc);
     if (!tree.success) {
-        m_fileList->addItem("Failed to load directory");
+        showErrorState();
         return;
     }
+
+    // Clear the file list and show file list state
+    m_fileList->clear();
+    showFileListState();
 
     for (const auto &entry : tree.entries) {
         QListWidgetItem *item =
@@ -197,8 +204,15 @@ void AfcExplorerWidget::loadPath(const QString &path)
         item->setData(Qt::UserRole, entry.isDir);
         if (entry.isDir)
             item->setIcon(QIcon::fromTheme("folder"));
-        else
-            item->setIcon(QIcon::fromTheme("text-x-generic"));
+        else {
+            QIcon fileIcon = QIcon::fromTheme("text-x-generic");
+            if (fileIcon.isNull()) {
+                item->setIcon(
+                    QIcon(":/resources/icons/IcBaselineInsertDriveFile.png"));
+            } else {
+                item->setIcon(fileIcon);
+            }
+        }
         m_fileList->addItem(item);
     }
 }
@@ -223,6 +237,8 @@ void AfcExplorerWidget::onFileListContextMenu(const QPoint &pos)
 
     QMenu menu;
     QAction *exportAction = menu.addAction("Export");
+    QAction *openAction = menu.addAction("Open");
+    QAction *openNativeAction = menu.addAction("Open Externally");
     QAction *selectedAction =
         menu.exec(m_fileList->viewport()->mapToGlobal(pos));
     if (selectedAction == exportAction) {
@@ -238,13 +254,43 @@ void AfcExplorerWidget::onFileListContextMenu(const QPoint &pos)
         }
         if (filesToExport.isEmpty())
             return;
+
         QString dir =
             QFileDialog::getExistingDirectory(this, "Select Export Directory");
         if (dir.isEmpty())
             return;
+
+        // Convert to ExportItem list
+        QList<ExportItem> exportItems;
+        QString currPath = "/";
+        if (!m_history.isEmpty())
+            currPath = m_history.top();
+        if (!currPath.endsWith("/"))
+            currPath += "/";
+
         for (QListWidgetItem *selItem : filesToExport) {
-            exportSelectedFile(selItem, dir);
+            QString fileName = selItem->text();
+            QString devicePath =
+                currPath == "/" ? "/" + fileName : currPath + fileName;
+            exportItems.append(ExportItem(devicePath, fileName));
         }
+
+        // Start export with singleton - manager will show its own dialog
+        ExportManager::sharedInstance()->startExport(m_device, exportItems, dir,
+                                                     m_afc);
+    } else if (selectedAction == openAction) {
+        onItemDoubleClicked(item);
+    } else if (selectedAction == openNativeAction) {
+        QString fileName = item->text();
+        QString currPath = "/";
+        if (!m_history.isEmpty())
+            currPath = m_history.top();
+        if (!currPath.endsWith("/"))
+            currPath += "/";
+        QString devicePath =
+            currPath == "/" ? "/" + fileName : currPath + fileName;
+
+        openWithDesktopService(devicePath, fileName);
     }
 }
 
@@ -269,9 +315,24 @@ void AfcExplorerWidget::onExportClicked()
     if (dir.isEmpty())
         return;
 
+    // Convert to ExportItem list
+    QList<ExportItem> exportItems;
+    QString currPath = "/";
+    if (!m_history.isEmpty())
+        currPath = m_history.top();
+    if (!currPath.endsWith("/"))
+        currPath += "/";
+
     for (QListWidgetItem *item : filesToExport) {
-        exportSelectedFile(item, dir);
+        QString fileName = item->text();
+        QString devicePath =
+            currPath == "/" ? "/" + fileName : currPath + fileName;
+        exportItems.append(ExportItem(devicePath, fileName));
     }
+
+    // Start export with singleton - manager will show its own dialog
+    ExportManager::sharedInstance()->startExport(m_device, exportItems, dir,
+                                                 m_afc);
 }
 
 void AfcExplorerWidget::exportSelectedFile(QListWidgetItem *item,
@@ -283,23 +344,14 @@ void AfcExplorerWidget::exportSelectedFile(QListWidgetItem *item,
         currPath = m_history.top();
     if (!currPath.endsWith("/"))
         currPath += "/";
-    qDebug() << "Current path:" << currPath;
     QString devicePath = currPath == "/" ? "/" + fileName : currPath + fileName;
     qDebug() << "Exporting file:" << devicePath;
 
     // Save to selected directory
     QString savePath = directory + "/" + fileName;
 
-    // Get device info and check connections
-    qDebug() << "Using device index:" << m_device->udid.c_str();
-    qDebug() << "Device UDID:" << QString::fromStdString(m_device->udid);
-    qDebug() << "Device Product Type:"
-             << QString::fromStdString(m_device->deviceInfo.productType);
-
-    // Export file using the validated connections
-    int result = export_file_to_path(m_currentAfcClient,
-                                     devicePath.toStdString().c_str(),
-                                     savePath.toStdString().c_str());
+    int result = exportFileToPath(m_afc, devicePath.toStdString().c_str(),
+                                  savePath.toStdString().c_str());
 
     qDebug() << "Export result:" << result;
 
@@ -322,17 +374,17 @@ void AfcExplorerWidget::exportSelectedFile(QListWidgetItem *item,
 }
 
 /*
-    FIXME  : abstract to services
+    FIXME : abstract to services
     even though we are using safe wrappers,
     we better move this to services
 */
-int AfcExplorerWidget::export_file_to_path(afc_client_t afc,
-                                           const char *device_path,
-                                           const char *local_path)
+int AfcExplorerWidget::exportFileToPath(afc_client_t afc,
+                                        const char *device_path,
+                                        const char *local_path)
 {
     uint64_t handle = 0;
     if (ServiceManager::safeAfcFileOpen(m_device, device_path, AFC_FOPEN_RDONLY,
-                                        &handle) != AFC_E_SUCCESS) {
+                                        &handle, m_afc) != AFC_E_SUCCESS) {
         qDebug() << "Failed to open file on device:" << device_path;
         return -1;
     }
@@ -346,14 +398,14 @@ int AfcExplorerWidget::export_file_to_path(afc_client_t afc,
     char buffer[4096];
     uint32_t bytes_read = 0;
     while (ServiceManager::safeAfcFileRead(m_device, handle, buffer,
-                                           sizeof(buffer),
-                                           &bytes_read) == AFC_E_SUCCESS &&
+                                           sizeof(buffer), &bytes_read,
+                                           m_afc) == AFC_E_SUCCESS &&
            bytes_read > 0) {
         fwrite(buffer, 1, bytes_read, out);
     }
 
     fclose(out);
-    ServiceManager::safeAfcFileClose(m_device, handle);
+    ServiceManager::safeAfcFileClose(m_device, handle, m_afc);
     return 0;
 }
 
@@ -374,9 +426,8 @@ void AfcExplorerWidget::onImportClicked()
     for (const QString &localPath : fileNames) {
         QFileInfo fi(localPath);
         QString devicePath = currPath + fi.fileName();
-        int result = import_file_to_device(m_currentAfcClient,
-                                           devicePath.toStdString().c_str(),
-                                           localPath.toStdString().c_str());
+        int result = importFileToDevice(m_afc, devicePath.toStdString().c_str(),
+                                        localPath.toStdString().c_str());
         if (result == 0)
             qDebug() << "Imported" << localPath << "to" << devicePath;
         else
@@ -387,10 +438,12 @@ void AfcExplorerWidget::onImportClicked()
     loadPath(currPath);
 }
 
-// Helper function to import a file from a local path to the device
-int AfcExplorerWidget::import_file_to_device(afc_client_t afc,
-                                             const char *device_path,
-                                             const char *local_path)
+/*
+    FIXME : move to services
+*/
+int AfcExplorerWidget::importFileToDevice(afc_client_t afc,
+                                          const char *device_path,
+                                          const char *local_path)
 {
     QFile in(local_path);
     if (!in.open(QIODevice::ReadOnly)) {
@@ -399,8 +452,8 @@ int AfcExplorerWidget::import_file_to_device(afc_client_t afc,
     }
 
     uint64_t handle = 0;
-    if (afc_file_open(afc, device_path, AFC_FOPEN_WRONLY, &handle) !=
-        AFC_E_SUCCESS) {
+    if (ServiceManager::safeAfcFileOpen(m_device, device_path, AFC_FOPEN_WRONLY,
+                                        &handle, m_afc) != AFC_E_SUCCESS) {
         qDebug() << "Failed to open file on device for writing:" << device_path;
         return -1;
     }
@@ -409,18 +462,18 @@ int AfcExplorerWidget::import_file_to_device(afc_client_t afc,
     qint64 bytesRead;
     while ((bytesRead = in.read(buffer, sizeof(buffer))) > 0) {
         uint32_t bytesWritten = 0;
-        if (afc_file_write(afc, handle, buffer,
-                           static_cast<uint32_t>(bytesRead),
-                           &bytesWritten) != AFC_E_SUCCESS ||
+        if (ServiceManager::safeAfcFileWrite(
+                m_device, handle, buffer, static_cast<uint32_t>(bytesRead),
+                &bytesWritten, m_afc) != AFC_E_SUCCESS ||
             bytesWritten != bytesRead) {
             qDebug() << "Failed to write to device file:" << device_path;
-            afc_file_close(afc, handle);
+            ServiceManager::safeAfcFileClose(m_device, handle, m_afc);
             in.close();
             return -1;
         }
     }
 
-    afc_file_close(afc, handle);
+    ServiceManager::safeAfcFileClose(m_device, handle, m_afc);
     in.close();
     return 0;
 }
@@ -437,9 +490,11 @@ void AfcExplorerWidget::setupFileExplorer()
         new ZIconWidget(QIcon(":/resources/icons/PhExport.png"), "Export");
     m_importBtn = new ZIconWidget(
         QIcon(":/resources/icons/LetsIconsImport.png"), "Import");
-    m_addToFavoritesBtn =
-        new ZIconWidget(QIcon(":/resources/icons/MaterialSymbolsFavorite.png"),
-                        "Add to Favorites");
+    if (m_favEnabled) {
+        m_addToFavoritesBtn = new ZIconWidget(
+            QIcon(":/resources/icons/MaterialSymbolsFavorite.png"),
+            "Add to Favorites");
+    }
 
     // Navigation layout (Address Bar with embedded icons)
     m_navWidget = new QWidget();
@@ -477,6 +532,14 @@ void AfcExplorerWidget::setupFileExplorer()
         "Go Forward");
     m_forwardButton->setEnabled(false);
 
+    m_homeButton = new ZIconWidget(
+        QIcon(":/resources/icons/MaterialSymbolsLightHome.png"), "Go Home");
+
+    m_upButton = new ZIconWidget(
+        QIcon(":/resources/icons/MaterialSymbolsArrowUpwardAltRounded.png"),
+        "Go Up");
+    m_upButton->setEnabled(false);
+
     m_enterButton = new ZIconWidget(
         QIcon(":/resources/icons/MaterialSymbolsLightKeyboardReturn.png"),
         "Navigate to path");
@@ -488,35 +551,75 @@ void AfcExplorerWidget::setupFileExplorer()
     // Add widgets to navigation layout
     leftNavLayout->addWidget(m_backButton);
     leftNavLayout->addWidget(m_forwardButton);
+    leftNavLayout->addWidget(m_homeButton);
+    leftNavLayout->addWidget(m_upButton);
     navLayout->addWidget(explorerLeftSideNavButtons);
     navLayout->addWidget(m_addressBar);
     navLayout->addWidget(m_importBtn);
     navLayout->addWidget(m_exportBtn);
-    navLayout->addWidget(m_addToFavoritesBtn);
+    if (m_favEnabled)
+        navLayout->addWidget(m_addToFavoritesBtn);
+
     navLayout->addWidget(m_enterButton);
 
     // Add the container layout (which centers navWidget) to the main layout
     explorerLayout->addLayout(navContainerLayout);
 
+    // Create stacked widget for content (file list or error state)
+    m_contentStack = new QStackedWidget();
+
+    // Create file list widget
+    m_fileListWidget = new QWidget();
+    QVBoxLayout *fileListLayout = new QVBoxLayout(m_fileListWidget);
+    fileListLayout->setContentsMargins(0, 0, 0, 0);
+
     // File list
     m_fileList = new QListWidget();
-    // todo
     m_fileList->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
     QScrollBar *vBar = m_fileList->QAbstractScrollArea::verticalScrollBar();
-    // vBar->setStyleSheet("background:red; border: red;");
     vBar->setStyleSheet(styleSheet());
-    // vBar->setStyleSheet(
-    //     "QScrollArea { background: transparent; border: none; }");
-    // m_scrollArea->viewport()->setStyleSheet("background: transparent;");
-    // m_fileList->viewport()->setStyleSheet("background: transparent;");
-    explorerLayout->addWidget(m_fileList);
+    fileListLayout->addWidget(m_fileList);
+
+    // Create error widget
+    m_errorWidget = new QWidget();
+    QVBoxLayout *errorLayout = new QVBoxLayout(m_errorWidget);
+    errorLayout->setContentsMargins(20, 20, 20, 20);
+
+    errorLayout->addStretch();
+
+    m_errorLabel = new QLabel(m_errorMessage);
+    m_errorLabel->setAlignment(Qt::AlignCenter);
+    m_errorLabel->setWordWrap(true);
+    errorLayout->addWidget(m_errorLabel);
+
+    m_retryButton = new QPushButton("Try Again");
+    m_retryButton->setMaximumWidth(120);
+    QHBoxLayout *buttonLayout = new QHBoxLayout();
+    buttonLayout->addStretch();
+    buttonLayout->addWidget(m_retryButton);
+    buttonLayout->addStretch();
+    errorLayout->addLayout(buttonLayout);
+
+    errorLayout->addStretch();
+
+    // Add both widgets to the stacked widget
+    m_contentStack->addWidget(m_fileListWidget);
+    m_contentStack->addWidget(m_errorWidget);
+
+    // Start with file list view
+    m_contentStack->setCurrentWidget(m_fileListWidget);
+
+    explorerLayout->addWidget(m_contentStack);
 
     // Connect buttons and actions
     connect(m_backButton, &ZIconWidget::clicked, this,
             &AfcExplorerWidget::goBack);
     connect(m_forwardButton, &ZIconWidget::clicked, this,
             &AfcExplorerWidget::goForward);
+    connect(m_homeButton, &ZIconWidget::clicked, this,
+            &AfcExplorerWidget::goHome);
+    connect(m_upButton, &ZIconWidget::clicked, this, &AfcExplorerWidget::goUp);
     connect(m_enterButton, &ZIconWidget::clicked, this,
             &AfcExplorerWidget::onAddressBarReturnPressed);
     connect(m_addressBar, &QLineEdit::returnPressed, this,
@@ -527,18 +630,22 @@ void AfcExplorerWidget::setupFileExplorer()
             &AfcExplorerWidget::onExportClicked);
     connect(m_importBtn, &ZIconWidget::clicked, this,
             &AfcExplorerWidget::onImportClicked);
-    connect(m_addToFavoritesBtn, &ZIconWidget::clicked, this,
-            &AfcExplorerWidget::onAddToFavoritesClicked);
+    connect(m_retryButton, &QPushButton::clicked, this,
+            &AfcExplorerWidget::onRetryClicked);
     connect(m_fileList->selectionModel(),
             &QItemSelectionModel::selectionChanged, this,
             &AfcExplorerWidget::updateButtonStates);
+
+    if (m_favEnabled) {
+        connect(m_addToFavoritesBtn, &ZIconWidget::clicked, this,
+                &AfcExplorerWidget::onAddToFavoritesClicked);
+    }
 
     updateNavigationButtons();
     updateButtonStates(); // Initialize button states
     updateNavStyles();
 }
 
-// todo: implement
 void AfcExplorerWidget::onAddToFavoritesClicked()
 {
     QString currentPath = "/";
@@ -548,18 +655,15 @@ void AfcExplorerWidget::onAddToFavoritesClicked()
     bool ok;
     QString alias = QInputDialog::getText(
         this, "Add to Favorites",
-        "Enter alias for this location:", QLineEdit::Normal, currentPath, &ok);
+        "Enter alias for this location:", QLineEdit::Normal, "Alias here", &ok);
     if (ok && !alias.isEmpty()) {
-        saveFavoritePlace(currentPath, alias);
+        emit favoritePlaceAdded(alias, currentPath);
+    } else if (ok && alias.isEmpty()) {
+        QMessageBox::warning(nullptr, "Invalid Input", "Alias was empty.");
+        qWarning() << "Cannot save favorite place with empty alias";
+    } else if (!ok) {
+        qWarning() << "Failed to get alias for favorite place";
     }
-}
-
-void AfcExplorerWidget::saveFavoritePlace(const QString &path,
-                                          const QString &alias)
-{
-    qDebug() << "Saving favorite place:" << alias << "->" << path;
-    SettingsManager *settings = SettingsManager::sharedInstance();
-    settings->saveFavoritePlace(path, alias);
 }
 
 void AfcExplorerWidget::updateNavStyles()
@@ -612,4 +716,85 @@ void AfcExplorerWidget::updateButtonStates()
         }
     }
     m_exportBtn->setEnabled(hasExportableFiles);
+}
+
+void AfcExplorerWidget::setErrorMessage(const QString &message)
+{
+    m_errorMessage = message;
+    if (m_errorLabel) {
+        m_errorLabel->setText(m_errorMessage);
+    }
+}
+
+void AfcExplorerWidget::showErrorState()
+{
+    if (m_contentStack) {
+        m_contentStack->setCurrentWidget(m_errorWidget);
+    }
+}
+
+void AfcExplorerWidget::showFileListState()
+{
+    if (m_contentStack) {
+        m_contentStack->setCurrentWidget(m_fileListWidget);
+    }
+}
+
+void AfcExplorerWidget::onRetryClicked()
+{
+    QString currentPath = "/";
+    if (!m_history.isEmpty()) {
+        currentPath = m_history.top();
+    }
+    loadPath(currentPath);
+}
+
+void AfcExplorerWidget::navigateToPath(const QString &path)
+{
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QString normalizedPath = path;
+    if (!normalizedPath.startsWith("/")) {
+        normalizedPath = "/" + normalizedPath;
+    }
+    normalizedPath = normalizedPath.replace(QRegularExpression("/+"), "/");
+
+    m_history.push(normalizedPath);
+    loadPath(normalizedPath);
+}
+
+void AfcExplorerWidget::goHome()
+{
+    // Clear forward history when navigating to a new directory
+    m_forwardHistory.clear();
+    m_history.push(m_root);
+    loadPath(m_root);
+}
+
+void AfcExplorerWidget::goUp()
+{
+    if (m_history.isEmpty()) {
+        return;
+    }
+
+    QString currentPath = m_history.top();
+
+    // Can't go up from the root directory
+    if (currentPath == "/") {
+        return;
+    }
+
+    // Find the parent directory
+    int lastSlashIndex = currentPath.lastIndexOf('/');
+    QString parentPath =
+        (lastSlashIndex > 0) ? currentPath.left(lastSlashIndex) : "/";
+
+    // Going up is a new navigation action, so clear forward history
+    m_forwardHistory.clear();
+
+    // Add the new path to history and load it
+    m_history.push(parentPath);
+    loadPath(parentPath);
 }

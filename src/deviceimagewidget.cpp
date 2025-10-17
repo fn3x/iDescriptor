@@ -56,41 +56,44 @@ QString DeviceImageWidget::getDeviceMockupPath() const
 QString DeviceImageWidget::getWallpaperPath() const
 {
     int iosVersion = getIosVersionFromDevice();
-
+    qDebug() << "Detected iOS version:" << iosVersion;
     // Map iOS version to available wallpapers
     QString wallpaperVersion;
-    if (iosVersion >= 18) {
-        wallpaperVersion = "ios18";
-    } else if (iosVersion >= 17) {
-        wallpaperVersion = "ios17";
-    } else if (iosVersion >= 16) {
-        wallpaperVersion = "ios16";
-    } else if (iosVersion >= 15) {
-        wallpaperVersion = "ios15";
-    } else if (iosVersion >= 14) {
-        wallpaperVersion = "ios14";
-    } else if (iosVersion >= 13) {
-        wallpaperVersion = "ios13";
-    } else if (iosVersion >= 12) {
-        wallpaperVersion = "ios12";
-    } else if (iosVersion >= 11) {
-        wallpaperVersion = "ios11";
-    } else if (iosVersion >= 10) {
-        wallpaperVersion = "ios10";
-    } else if (iosVersion >= 9) {
-        wallpaperVersion = "ios9";
-    } else if (iosVersion >= 8) {
-        wallpaperVersion = "ios8";
-    } else if (iosVersion >= 7) {
-        wallpaperVersion = "ios7";
-    } else if (iosVersion >= 6) {
-        wallpaperVersion = "ios6";
-    } else if (iosVersion >= 5) {
-        wallpaperVersion = "ios5";
-    } else if (iosVersion >= 4) {
+
+    if (iosVersion <= 4) {
         wallpaperVersion = "ios4";
+    } else if (iosVersion == 5) {
+        wallpaperVersion = "ios5";
+    } else if (iosVersion == 6) {
+        wallpaperVersion = "ios6";
+    } else if (iosVersion == 7) {
+        wallpaperVersion = "ios7";
+    } else if (iosVersion == 8) {
+        wallpaperVersion = "ios8";
+    } else if (iosVersion == 9) {
+        wallpaperVersion = "ios9";
+    } else if (iosVersion == 10) {
+        wallpaperVersion = "ios10";
+    } else if (iosVersion == 11) {
+        wallpaperVersion = "ios11";
+    } else if (iosVersion == 12) {
+        wallpaperVersion = "ios12";
+    } else if (iosVersion == 13) {
+        wallpaperVersion = "ios13";
+    } else if (iosVersion == 14) {
+        wallpaperVersion = "ios14";
+    } else if (iosVersion == 15) {
+        wallpaperVersion = "ios15";
+    } else if (iosVersion == 16) {
+        wallpaperVersion = "ios16";
+    } else if (iosVersion == 17) {
+        wallpaperVersion = "ios17";
+    } else if (iosVersion == 18) {
+        wallpaperVersion = "ios18";
+    } else if (iosVersion == 26) {
+        wallpaperVersion = "ios26";
     } else {
-        // Unknown version, use ios26 as fallback
+        // For future versions, use the latest available wallpaper
         wallpaperVersion = "ios26";
     }
 
@@ -114,7 +117,9 @@ QString DeviceImageWidget::getMockupNameFromDisplayName(
         return "x";
     } else if (displayName.contains("iPhone 6", Qt::CaseInsensitive) ||
                displayName.contains("iPhone 7", Qt::CaseInsensitive) ||
-               displayName.contains("iPhone 8", Qt::CaseInsensitive)) {
+               displayName.contains("iPhone 8", Qt::CaseInsensitive) ||
+               displayName.contains("iPhone SE 2nd", Qt::CaseInsensitive) ||
+               displayName.contains("iPhone SE 3rd", Qt::CaseInsensitive)) {
         return "6";
     } else if (displayName.contains("iPhone 5", Qt::CaseInsensitive) ||
                displayName.contains("iPhone SE", Qt::CaseInsensitive)) {

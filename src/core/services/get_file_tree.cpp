@@ -5,22 +5,14 @@
 #include <libimobiledevice/lockdown.h>
 #include <string.h>
 
-AFCFileTree get_file_tree(afc_client_t afcClient,
-                          const std::string &path)
+AFCFileTree get_file_tree(afc_client_t afcClient, const std::string &path)
 {
 
     AFCFileTree result;
     result.currentPath = path;
 
-    if (afcClient == nullptr) {
-        qDebug() << "AFC client is not initialized in get_file_tree";
-        result.success = false;
-        return result;
-    }
-
     char **dirs = NULL;
-    if (afc_read_directory(afcClient, path.c_str(), &dirs) !=
-        AFC_E_SUCCESS) {
+    if (afc_read_directory(afcClient, path.c_str(), &dirs) != AFC_E_SUCCESS) {
         result.success = false;
         return result;
     }

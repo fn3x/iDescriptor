@@ -1,5 +1,7 @@
 #include "appcontext.h"
 #include "iDescriptor.h"
+#include "mainwindow.h"
+#include "settingsmanager.h"
 #include <QDBusConnection>
 #include <QDBusMessage>
 #include <QDebug>
@@ -13,53 +15,12 @@ AppContext *AppContext::sharedInstance()
     return &instance;
 }
 
-AppContext::AppContext(QObject *parent) : QObject{parent}
-{
-    // TODO: IMPLEMENT
-    // QDBusConnection bus = QDBusConnection::systemBus();
-
-    // // Connect to the logind Manager's PrepareForSleep signal
-    // bool connected = bus.connect("org.freedesktop.login1",  // service
-    //                              "/org/freedesktop/login1", // object path
-    //                              "org.freedesktop.login1.Manager", //
-    //                              interface "PrepareForSleep", // signal name
-    //                              this,              // receiver
-    //                              SLOT(handleDBusSignal(QDBusMessage &)) //
-    //                              slot
-    // );
-
-    // if (!connected) {
-    //     qDebug() << "Failed to connect to PrepareForSleep signal.";
-    // } else {
-    //     qDebug() << "Successfully connected to PrepareForSleep signal.";
-    // }
-}
-
-void AppContext::handleDBusSignal(const QDBusMessage &msg)
-{
-    if (msg.arguments().isEmpty()) {
-        qWarning() << "Received PrepareForSleep signal with no arguments.";
-        return;
-    }
-
-    QVariant firstArg = msg.arguments().at(0);
-    if (!firstArg.canConvert<bool>()) {
-        qWarning()
-            << "First argument of PrepareForSleep signal is not a boolean.";
-        return;
-    }
-
-    bool isSleeping = firstArg.toBool();
-    if (isSleeping) {
-        qDebug() << "System is going to sleep...";
-        emit systemSleepStarting();
-        // Clean up device resources before sleep
-        // cleanupAllDevices();
-    } else {
-        qDebug() << "System is resuming from sleep.";
-        emit systemWakeup();
-    }
-}
+/*
+ FIXME: waking up from sleep disconnects all devices
+ and does not reconnect them until the user plugs them
+ back in, even if they are still connected
+*/
+AppContext::AppContext(QObject *parent) : QObject{parent} {}
 
 void AppContext::addDevice(QString udid, idevice_connection_type conn_type,
                            AddType addType)
@@ -73,17 +34,14 @@ void AppContext::addDevice(QString udid, idevice_connection_type conn_type,
 
         if (!initResult.success) {
             qDebug() << "Failed to initialize device with UDID: " << udid;
-            // return onDeviceInitFailed(udid, initResult.error);
             if (initResult.error == LOCKDOWN_E_PASSWORD_PROTECTED) {
                 if (addType == AddType::Regular) {
                     m_pendingDevices.append(udid);
                     emit devicePasswordProtected(udid);
                     emit deviceChange();
+                    // After 30 seconds, if the device is still pending,
+                    // consider the pairing expired
                     QTimer::singleShot(30000, this, [this, udid]() {
-                        // After 30 seconds, if the device is still pending,
-                        // consider the pairing expired
-                        qDebug()
-                            << "Pairing timer fired for device UDID: " << udid;
                         if (m_pendingDevices.contains(udid)) {
                             qDebug()
                                 << "Pairing expired for device UDID: " << udid;
@@ -94,13 +52,14 @@ void AppContext::addDevice(QString udid, idevice_connection_type conn_type,
                     });
                 }
             } else if (initResult.error ==
-                       LOCKDOWN_E_PAIRING_DIALOG_RESPONSE_PENDING) {
+                           LOCKDOWN_E_PAIRING_DIALOG_RESPONSE_PENDING ||
+                       initResult.error == LOCKDOWN_E_INVALID_HOST_ID) {
                 m_pendingDevices.append(udid);
                 emit devicePairPending(udid);
                 emit deviceChange();
+                // After 30 seconds, if the device is still pending,
+                // consider the pairing expired
                 QTimer::singleShot(30000, this, [this, udid]() {
-                    // After 30 seconds, if the device is still pending,
-                    // consider the pairing expired
                     qDebug() << "Pairing timer fired for device UDID: " << udid;
                     if (m_pendingDevices.contains(udid)) {
                         qDebug() << "Pairing expired for device UDID: " << udid;
@@ -128,6 +87,15 @@ void AppContext::addDevice(QString udid, idevice_connection_type conn_type,
         };
         m_devices[device->udid] = device;
         if (addType == AddType::Regular) {
+            // Apply settings-based behaviors
+            SettingsManager::sharedInstance()->doIfEnabled(
+                SettingsManager::Setting::AutoRaiseWindow, []() {
+                    if (MainWindow *mainWindow = MainWindow::sharedInstance()) {
+                        mainWindow->raise();
+                        mainWindow->activateWindow();
+                    }
+                });
+
             emit deviceAdded(device);
             emit deviceChange();
             return;
@@ -159,9 +127,9 @@ void AppContext::removeDevice(QString _udid)
              << QString::fromStdString(uuid);
 
     if (m_pendingDevices.contains(_udid)) {
+        m_pendingDevices.removeAll(_udid);
         emit devicePairingExpired(_udid);
         emit deviceChange();
-        m_pendingDevices.removeAll(_udid);
         return;
     } else {
         qDebug() << "Device with UUID " + _udid +
@@ -199,11 +167,15 @@ void AppContext::removeRecoveryDevice(uint64_t ecid)
 
     qDebug() << "Removing recovery device with ECID:" << ecid;
 
+    // Fix use-after-free: get pointer before removing from map
+    iDescriptorRecoveryDevice *deviceInfo = m_recoveryDevices.value(ecid);
     m_recoveryDevices.remove(ecid);
+
     emit recoveryDeviceRemoved(ecid);
     emit deviceChange();
-    iDescriptorRecoveryDevice *deviceInfo = m_recoveryDevices[ecid];
 
+    std::lock_guard<std::recursive_mutex> lock(*deviceInfo->mutex);
+    delete deviceInfo->mutex;
     delete deviceInfo;
 }
 
@@ -247,6 +219,7 @@ void AppContext::addRecoveryDevice(uint64_t ecid)
     recoveryDevice->cpid = res.deviceInfo.cpid;
     recoveryDevice->bdid = res.deviceInfo.bdid;
     recoveryDevice->displayName = res.displayName;
+    recoveryDevice->mutex = new std::recursive_mutex();
 
     m_recoveryDevices[res.deviceInfo.ecid] = recoveryDevice;
     emit recoveryDeviceAdded(recoveryDevice);
@@ -259,14 +232,16 @@ AppContext::~AppContext()
         emit deviceRemoved(device->udid);
         if (device->afcClient)
             afc_client_free(device->afcClient);
+        if (device->afc2Client)
+            afc_client_free(device->afc2Client);
         idevice_free(device->device);
+        delete device->mutex;
         delete device;
     }
 
-    // TODO
     for (auto recoveryDevice : m_recoveryDevices) {
-        // emit
-        // recoveryDeviceRemoved(QString::fromStdString(recoveryDevice->ecid));
-        // delete recoveryDevice;
+        emit recoveryDeviceRemoved(recoveryDevice->ecid);
+        delete recoveryDevice->mutex;
+        delete recoveryDevice;
     }
 }

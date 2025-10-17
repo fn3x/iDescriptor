@@ -2,10 +2,12 @@
 #define DEVICEINFOWIDGET_H
 #include "batterywidget.h"
 #include "deviceimagewidget.h"
+#include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include <QLabel>
 #include <QTimer>
 #include <QWidget>
+
 class DeviceInfoWidget : public QWidget
 {
     Q_OBJECT
@@ -25,7 +27,7 @@ private:
     QLabel *m_chargingStatusLabel;
     QLabel *m_chargingWattsWithCableTypeLabel;
     BatteryWidget *m_batteryWidget;
-    QLabel *m_lightningIconLabel;
+    ZIconWidget *m_lightningIconLabel;
 
     DeviceImageWidget *m_deviceImageWidget;
 };

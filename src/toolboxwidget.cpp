@@ -3,13 +3,16 @@
 #include "appcontext.h"
 #include "cableinfowidget.h"
 #include "devdiskimageswidget.h"
+#include "devdiskmanager.h"
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
+#ifdef __APPLE__
 #include "ifusewidget.h"
+#endif
 #include "pcfileexplorerwidget.h"
 #include "querymobilegestaltwidget.h"
-#include "realtimescreen.h"
-#include "virtual_location.h"
+#include "realtimescreenwidget.h"
+#include "virtuallocationwidget.h"
 #include <QApplication>
 #include <QDebug>
 #include <QMessageBox>
@@ -29,41 +32,32 @@ bool enterRecoveryMode(iDescriptorDevice *device)
     idevice_error_t ret = IDEVICE_E_UNKNOWN_ERROR;
 
     if (LOCKDOWN_E_SUCCESS !=
-        (ldret = lockdownd_client_new(device->device, &client,
-                                      "EnterRecoveryMode"))) {
+        (ldret = lockdownd_client_new(device->device, &client, APP_LABEL))) {
         printf("ERROR: Could not connect to lockdownd: %s (%d)\n",
                lockdownd_strerror(ldret), ldret);
-        // idevice_free(device);
-        return 1;
+        return false;
     }
 
-    int res = 0;
-    // printf("Telling device with udid %s to enter recovery mode.\n", udid);
     ldret = lockdownd_enter_recovery(client);
     if (ldret == LOCKDOWN_E_SESSION_INACTIVE) {
         lockdownd_client_free(client);
         client = NULL;
-        if (LOCKDOWN_E_SUCCESS !=
-            (ldret = lockdownd_client_new_with_handshake(
-                 device->device, &client, "EnterRecoveryMode"))) {
+        if (LOCKDOWN_E_SUCCESS != (ldret = lockdownd_client_new_with_handshake(
+                                       device->device, &client, APP_LABEL))) {
             printf("ERROR: Could not connect to lockdownd: %s (%d)\n",
                    lockdownd_strerror(ldret), ldret);
-            // idevice_free(device);
-            return 1;
+            return false;
         }
         ldret = lockdownd_enter_recovery(client);
     }
+    lockdownd_client_free(client);
     if (ldret != LOCKDOWN_E_SUCCESS) {
         printf("Failed to enter recovery mode.\n");
-        res = 1;
+        return false;
     } else {
         printf("Device is successfully switching to recovery mode.\n");
+        return true;
     }
-
-    lockdownd_client_free(client);
-    // idevice_free(device);
-
-    return 0;
 }
 
 ToolboxWidget::ToolboxWidget(QWidget *parent) : QWidget{parent}
@@ -103,56 +97,94 @@ void ToolboxWidget::setupUI()
     m_scrollArea->viewport()->setStyleSheet("background: transparent;");
 
     m_contentWidget = new QWidget();
-    m_gridLayout = new QGridLayout(m_contentWidget);
+    QVBoxLayout *contentLayout = new QVBoxLayout(m_contentWidget);
+    contentLayout->setSpacing(20);
+    contentLayout->setContentsMargins(0, 0, 0, 0);
+
+    // Main Tools Section
+    QLabel *mainToolsLabel = new QLabel("Tools");
+    mainToolsLabel->setStyleSheet(
+        "font-weight: bold; font-size: 14px; margin-left: 10px");
+    contentLayout->addWidget(mainToolsLabel);
+
+    QWidget *mainToolsWidget = new QWidget();
+    m_gridLayout = new QGridLayout(mainToolsWidget);
     m_gridLayout->setSpacing(10);
 
-    QList<iDescriptorToolWidget> toolWidgets;
-    toolWidgets.append({iDescriptorTool::Airplayer,
-                        "Start an airplayer service to cast your device screen "
-                        "(does not require a device to be connected)",
-                        false, ""});
-    toolWidgets.append({iDescriptorTool::VirtualLocation,
-                        "Simulate GPS location on your device", true, ""});
-    toolWidgets.append(
+    QList<iDescriptorToolWidget> mainToolWidgets;
+    mainToolWidgets.append(
+        {iDescriptorTool::Airplayer,
+         "Start an airplayer service to cast your device screen "
+         "(does not require a device to be connected)",
+         false, ""});
+    mainToolWidgets.append({iDescriptorTool::VirtualLocation,
+                            "Simulate GPS location on your device", true, ""});
+    mainToolWidgets.append(
         {iDescriptorTool::RealtimeScreen,
          "View device screen in real-time (wired connection required)", true,
          ""});
-    toolWidgets.append(
-        {iDescriptorTool::Restart, "Restart device services", true, ""});
-    toolWidgets.append(
-        {iDescriptorTool::Shutdown, "Shut down the device", true, ""});
-    toolWidgets.append({iDescriptorTool::RecoveryMode,
-                        "Enter device recovery mode", true, ""});
-    toolWidgets.append({iDescriptorTool::QueryMobileGestalt,
-                        "Query device hardware information", true, ""});
-    toolWidgets.append({iDescriptorTool::TouchIdTest,
-                        "Test Touch ID functionality", true, ""});
-    toolWidgets.append(
-        {iDescriptorTool::FaceIdTest, "Test Face ID functionality", true, ""});
-    toolWidgets.append({iDescriptorTool::UnmountDevImage,
-                        "Unmount a developer image", true, ""});
-    toolWidgets.append({iDescriptorTool::EnterRecoveryMode,
-                        "Enter device recovery mode", true, ""});
-    toolWidgets.append({iDescriptorTool::DeveloperDiskImages,
-                        "Manage developer disk images", false, ""});
-    toolWidgets.append({iDescriptorTool::WirelessFileImport,
-                        "Import files wirelessly to your iDevice", false, ""});
-    toolWidgets.append({iDescriptorTool::MountIphone,
-                        "Mount your iPhone's filesystem on your PC", true, ""});
-    toolWidgets.append({iDescriptorTool::CableInfoWidget,
-                        "View detailed cable and connection info", true, ""});
-    toolWidgets.append({iDescriptorTool::NetworkDevices,
-                        "Discover and monitor devices on your network", false,
-                        ""});
+    mainToolWidgets.append({iDescriptorTool::QueryMobileGestalt,
+                            "Query device hardware information", true, ""});
+    mainToolWidgets.append({iDescriptorTool::DeveloperDiskImages,
+                            "Manage developer disk images", false, ""});
+    mainToolWidgets.append({iDescriptorTool::WirelessFileImport,
+                            "Import files wirelessly to your iDevice", false,
+                            ""});
+#ifdef __APPLE__
+    mainToolWidgets.append({iDescriptorTool::iFuse,
+                            "Mount your iPhone's filesystem on your PC", true,
+                            ""});
+#endif
+    mainToolWidgets.append({iDescriptorTool::CableInfoWidget,
+                            "View detailed cable and connection info", true,
+                            ""});
+    mainToolWidgets.append({iDescriptorTool::NetworkDevices,
+                            "Discover and monitor devices on your network",
+                            false, ""});
 
-    for (int i = 0; i < toolWidgets.size(); ++i) {
-        const auto &tool = toolWidgets[i];
+    for (int i = 0; i < mainToolWidgets.size(); ++i) {
+        const auto &tool = mainToolWidgets[i];
         ClickableWidget *toolbox =
             createToolbox(tool.tool, tool.description, tool.requiresDevice);
         int row = i / 3;
         int col = i % 3;
         m_gridLayout->addWidget(toolbox, row, col);
     }
+
+    contentLayout->addWidget(mainToolsWidget);
+
+    // More Tools Section
+    QLabel *moreToolsLabel = new QLabel("More Tools");
+    moreToolsLabel->setStyleSheet(
+        "font-weight: bold; font-size: 14px; margin-left: 10px");
+    contentLayout->addWidget(moreToolsLabel);
+
+    QWidget *moreToolsWidget = new QWidget();
+    QGridLayout *moreGridLayout = new QGridLayout(moreToolsWidget);
+    moreGridLayout->setSpacing(10);
+
+    QList<iDescriptorToolWidget> moreToolWidgets;
+    moreToolWidgets.append(
+        {iDescriptorTool::MountDevImage,
+         "Mount a compatible device image with a single click", true, ""});
+    moreToolWidgets.append(
+        {iDescriptorTool::Restart, "Restart device services", true, ""});
+    moreToolWidgets.append(
+        {iDescriptorTool::Shutdown, "Shut down the device", true, ""});
+    moreToolWidgets.append({iDescriptorTool::RecoveryMode,
+                            "Enter device recovery mode", true, ""});
+
+    for (int i = 0; i < moreToolWidgets.size(); ++i) {
+        const auto &tool = moreToolWidgets[i];
+        ClickableWidget *toolbox =
+            createToolbox(tool.tool, tool.description, tool.requiresDevice);
+        int row = i / 3;
+        int col = i % 3;
+        moreGridLayout->addWidget(toolbox, row, col);
+    }
+
+    contentLayout->addWidget(moreToolsWidget);
+    contentLayout->addStretch();
 
     m_scrollArea->setWidget(m_contentWidget);
     mainLayout->addWidget(m_scrollArea);
@@ -186,9 +218,6 @@ ClickableWidget *ToolboxWidget::createToolbox(iDescriptorTool tool,
     case iDescriptorTool::RealtimeScreen:
         title = "Realtime Screen";
         break;
-    case iDescriptorTool::EnterRecoveryMode:
-        title = "Enter Recovery Mode";
-        break;
     case iDescriptorTool::MountDevImage:
         title = "Mount Dev Image";
         break;
@@ -213,20 +242,11 @@ ClickableWidget *ToolboxWidget::createToolbox(iDescriptorTool tool,
     case iDescriptorTool::WirelessFileImport:
         title = "Wireless File Import";
         break;
-    case iDescriptorTool::MountIphone:
+    case iDescriptorTool::iFuse:
         title = "iFuse Mount";
         break;
     case iDescriptorTool::CableInfoWidget:
         title = "Cable Info";
-        break;
-    case iDescriptorTool::TouchIdTest:
-        title = "Touch ID Test";
-        break;
-    case iDescriptorTool::FaceIdTest:
-        title = "Face ID Test";
-        break;
-    case iDescriptorTool::UnmountDevImage:
-        title = "Unmount Dev Image";
         break;
     case iDescriptorTool::NetworkDevices:
         title = "Network Devices";
@@ -316,19 +336,21 @@ void ToolboxWidget::updateUI()
 void ToolboxWidget::onDeviceSelectionChanged()
 {
     // Handle device selection change
-    QString selectedDevice = m_deviceCombo->currentText();
-    qDebug() << "Selected device:" << selectedDevice;
+    QString selectedUdid = m_deviceCombo->currentData().toString();
+    qDebug() << "Selected device UDID:" << selectedUdid;
 
-    // Update m_uuid if a valid device is selected
+    // Update m_uuid and m_currentDevice if a valid device is selected
     QList<iDescriptorDevice *> devices =
         AppContext::sharedInstance()->getAllDevices();
     for (iDescriptorDevice *device : devices) {
-        if (QString::fromStdString(device->udid) == selectedDevice) {
+        if (QString::fromStdString(device->udid) == selectedUdid) {
             m_uuid = device->udid;
+            m_currentDevice = device;
             return;
         }
     }
     m_uuid.clear();
+    m_currentDevice = nullptr;
 }
 
 void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
@@ -344,11 +366,12 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
     } break;
 
     case iDescriptorTool::RealtimeScreen: {
-        RealtimeScreen *realtimeScreen =
-            new RealtimeScreen(QString::fromStdString(m_uuid));
+        RealtimeScreenWidget *realtimeScreen =
+            new RealtimeScreenWidget(m_currentDevice);
+        realtimeScreen->setAttribute(Qt::WA_DeleteOnClose);
         realtimeScreen->show();
     } break;
-    case iDescriptorTool::EnterRecoveryMode: {
+    case iDescriptorTool::RecoveryMode: {
         // Handle entering recovery mode
         bool success = enterRecoveryMode(m_currentDevice);
         QMessageBox msgBox;
@@ -361,25 +384,38 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
         msgBox.exec();
     } break;
     case iDescriptorTool::MountDevImage: {
-        // TODO: Handle mounting device image
-        // bool success =
-        //     mount_dev_image(const_cast<char
-        //     *>(m_currentDevice->udid.c_str()));
-        // QMessageBox msgBox;
-        // msgBox.setWindowTitle("Mount Dev Image");
-        // if (success) {
-        //     msgBox.setText("Successfully mounted device image.");
-        // } else {
-        //     msgBox.setText("Failed to mount device image.");
-        // }
+        GetMountedImageResult result =
+            DevDiskManager::sharedInstance()->getMountedImage(
+                m_currentDevice->udid.c_str());
+
+        if (!result.success) {
+            QMessageBox::warning(this, "Failure", result.message.c_str());
+            return;
+        }
+
+        if (result.success || result.sig.empty()) {
+            bool devImgSuccess =
+                DevDiskManager::sharedInstance()->mountCompatibleImage(
+                    m_currentDevice);
+            if (!devImgSuccess) {
+                QMessageBox::warning(
+                    this, "Failure",
+                    "Failed to mount developer image on device. "
+                    "Try with a different cable.");
+                qDebug()
+                    << "Failed to mount developer image on device. Cannot set "
+                       "location.";
+                return;
+            }
+        }
+
     } break;
     case iDescriptorTool::VirtualLocation: {
         // Handle virtual location functionality
         VirtualLocation *virtualLocation = new VirtualLocation(m_currentDevice);
-        virtualLocation->setAttribute(
-            Qt::WA_DeleteOnClose);                  // Optional: auto cleanup
-        virtualLocation->setWindowFlag(Qt::Window); // Make it a true window
-        virtualLocation->resize(800, 600);          // Optional: default size
+        virtualLocation->setAttribute(Qt::WA_DeleteOnClose);
+        virtualLocation->setWindowFlag(Qt::Window);
+        virtualLocation->resize(800, 600);
         virtualLocation->show();
     } break;
     case iDescriptorTool::Restart: {
@@ -387,9 +423,6 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
     } break;
     case iDescriptorTool::Shutdown: {
         shutdownDevice(m_currentDevice);
-    } break;
-    case iDescriptorTool::RecoveryMode: {
-        _enterRecoveryMode(m_currentDevice);
     } break;
     case iDescriptorTool::QueryMobileGestalt: {
         // Handle querying MobileGestalt
@@ -401,7 +434,6 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
         queryMobileGestaltWidget->show();
     } break;
     case iDescriptorTool::DeveloperDiskImages: {
-        // single instance lock
         if (!m_devDiskImagesWidget) {
             m_devDiskImagesWidget = new DevDiskImagesWidget(m_currentDevice);
             m_devDiskImagesWidget->setAttribute(Qt::WA_DeleteOnClose);
@@ -416,20 +448,21 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
         }
     } break;
     case iDescriptorTool::WirelessFileImport: {
-        // Handle wireless file import
         PCFileExplorerWidget *fileExplorer = new PCFileExplorerWidget();
         fileExplorer->setAttribute(Qt::WA_DeleteOnClose);
         fileExplorer->setWindowFlag(Qt::Window);
         fileExplorer->resize(800, 600);
         fileExplorer->show();
     } break;
-    case iDescriptorTool::MountIphone: {
+#ifdef __APPLE__
+    case iDescriptorTool::iFuse: {
         iFuseWidget *ifuseWidget = new iFuseWidget(m_currentDevice);
         ifuseWidget->setAttribute(Qt::WA_DeleteOnClose);
         ifuseWidget->setWindowFlag(Qt::Window);
         ifuseWidget->resize(600, 400);
         ifuseWidget->show();
     } break;
+#endif
     case iDescriptorTool::CableInfoWidget: {
         CableInfoWidget *cableInfoWidget = new CableInfoWidget(m_currentDevice);
         cableInfoWidget->setAttribute(Qt::WA_DeleteOnClose);
@@ -438,7 +471,6 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
         cableInfoWidget->show();
     } break;
     case iDescriptorTool::NetworkDevices: {
-        // single instance lock
         if (!m_networkDevicesWidget) {
             m_networkDevicesWidget = new NetworkDevicesWidget();
             m_networkDevicesWidget->setAttribute(Qt::WA_DeleteOnClose);
@@ -460,6 +492,14 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
 
 void ToolboxWidget::restartDevice(iDescriptorDevice *device)
 {
+    QMessageBox msgBox;
+    msgBox.setWindowTitle("Restart Device");
+    msgBox.setText("Are you sure you want to restart the device?");
+    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    msgBox.setDefaultButton(QMessageBox::No);
+    int ret = msgBox.exec();
+    if (ret != QMessageBox::Yes)
+        return;
     if (!device || device->udid.empty()) {
         return;
     }
@@ -474,11 +514,23 @@ void ToolboxWidget::restartDevice(iDescriptorDevice *device)
 
 void ToolboxWidget::shutdownDevice(iDescriptorDevice *device)
 {
+
+    QMessageBox msgBox;
+    msgBox.setWindowTitle("Shutdown Device");
+    msgBox.setText("Are you sure you want to shutdown the device?");
+    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    msgBox.setDefaultButton(QMessageBox::No);
+
+    int ret = msgBox.exec();
+    if (ret != QMessageBox::Yes)
+        return;
     if (!device || device->udid.empty()) {
         return;
     }
 
     if (!(shutdown(device->device)))
+        // TODO: warn is a safe wrapper for QMessageBox but do we actually need
+        // it ?
         warn("Failed to shutdown device");
     else {
         warn("Device will shutdown once unplugged", "Success");
@@ -488,17 +540,27 @@ void ToolboxWidget::shutdownDevice(iDescriptorDevice *device)
 
 void ToolboxWidget::_enterRecoveryMode(iDescriptorDevice *device)
 {
+    QMessageBox msgBox;
+    msgBox.setWindowTitle("Enter Recovery Mode");
+    msgBox.setText("Are you sure you want to enter recovery mode?");
+    msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
+    msgBox.setDefaultButton(QMessageBox::No);
+
+    int ret = msgBox.exec();
+    if (ret != QMessageBox::Yes)
+        return;
+
     if (!device || device->udid.empty()) {
         return;
     }
 
     bool success = enterRecoveryMode(device);
-    QMessageBox msgBox;
-    msgBox.setWindowTitle("Recovery Mode");
+    QMessageBox _msgBox;
+    _msgBox.setWindowTitle("Recovery Mode");
     if (success) {
-        msgBox.setText("Successfully entered recovery mode.");
+        _msgBox.setText("Successfully entered recovery mode.");
     } else {
-        msgBox.setText("Failed to enter recovery mode.");
+        _msgBox.setText("Failed to enter recovery mode.");
     }
-    msgBox.exec();
+    _msgBox.exec();
 }

@@ -41,9 +41,13 @@ QPixmap load_heic(const QByteArray &imageData)
 
     int width = heif_image_get_width(img, heif_channel_interleaved);
     int height = heif_image_get_height(img, heif_channel_interleaved);
-    size_t stride;
+    int stride;
+    /*
+     FIXME: use heif_image_get_plane_readonly2 in future, on ubuntu 24 it's not
+     available yet
+    */
     const uint8_t *data =
-        heif_image_get_plane_readonly2(img, heif_channel_interleaved, &stride);
+        heif_image_get_plane_readonly(img, heif_channel_interleaved, &stride);
 
     if (!data) {
         qWarning() << "Failed to get image plane data";

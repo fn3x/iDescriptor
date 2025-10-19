@@ -44,6 +44,9 @@ jobs:
             libswscale-dev \
             libgstreamer1.0-dev \
             libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly \
             libfuse2 \
             libunwind-dev \
             libxcb-cursor0 \
@@ -127,7 +130,7 @@ jobs:
         working-directory: ./build
         run: |
           export VERSION=1.0.0
-          ../linuxdeployqt-continuous-x86_64.AppImage iDescriptor -appimage
+          ../linuxdeployqt-continuous-x86_64.AppImage iDescriptor -qmldir=../qml -appimage
 
       - name: Upload Artifact (Linux)
         if: runner.os == 'Linux'

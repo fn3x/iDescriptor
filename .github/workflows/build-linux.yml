@@ -90,24 +90,23 @@ jobs:
       - name: Build libimobiledevice suite (versioned tarballs)
         run: |
           set -euo pipefail
-
           workspace="$PWD"
           tmp="$PWD/_tmp_libs"
           mkdir -p "$tmp"
           cd "$tmp"
 
-          declare -A versions=(
-            ["libplist"]="$LIBPLIST_VER"
-            ["libtatsu"]="$LIBTATSU_VER"
-            ["libimobiledevice-glue"]="$LIBIMOBILEDEVICE_GLUE_VER"
-            ["libimobiledevice"]="$LIBIMOBILEDEVICE_VER"
-            ["libirecovery"]="$LIBIRECOVERY_VER"
-          )
-
           base_url="https://github.com/libimobiledevice"
 
-          for name in "${!versions[@]}"; do
-            ver="${versions[$name]}"
+          libs=( "libplist" "libtatsu" "libimobiledevice-glue" "libimobiledevice" "libirecovery" )
+
+          for name in "${libs[@]}"; do
+            ver_var=$(echo "${name^^}_VER" | sed 's/-/_/g')   # e.g. LIBPLIST_VER
+            ver="${!ver_var:-}"
+            if [ -z "$ver" ]; then
+              echo "Version for $name not set (env var $ver_var)"
+              exit 1
+            fi
+
             archive="${name}-${ver}.tar.bz2"
             url="${base_url}/${name}/releases/download/${ver}/${archive}"
             echo "=== Processing $name $ver ==="
@@ -118,8 +117,6 @@ jobs:
             tar xjf "$archive"
 
             srcdir="${name}-${ver}"
-
-
             pushd "$srcdir"
 
             ./configure

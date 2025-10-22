@@ -11,10 +11,15 @@ export VERSION=$VERSION
 export APPDIR=$PWD/AppDir
 export GSTREAMER_VERSION=1.0
 
-# Download linuxdeployqt if not already present
-if [ ! -f linuxdeployqt-continuous-x86_64.AppImage ]; then
-    wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
-    chmod a+x linuxdeployqt-continuous-x86_64.AppImage
+# Download linuxdeploy and linuxdeploy-plugin-qt if not already present
+if [ ! -f linuxdeploy-x86_64.AppImage ]; then
+    wget -c -nv "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
+    chmod a+x linuxdeploy-x86_64.AppImage 
+fi
+
+if [ ! -f linuxdeploy-plugin-qt-x86_64.AppImage ]; then
+    wget -c -nv "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage"
+    chmod a+x linuxdeploy-plugin-qt-x86_64.AppImage 
 fi
 
 # Ensure patchelf is installed
@@ -31,6 +36,13 @@ mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
 # Copy executable and icon
 cp build/iDescriptor "$APPDIR/usr/bin/"
 cp resources/icons/app-icon/icon.png "$APPDIR/usr/share/icons/hicolor/256x256/apps/iDescriptor.png"
+
+
+# Copy ifuse
+cp /usr/local/bin/ifuse "$APPDIR/usr/bin"
+
+# Copy iproxy
+cp /usr/local/bin/iproxy "$APPDIR/usr/bin"
 
 # Bundle GStreamer plugins and helpers
 plugins_target_dir="$APPDIR/usr/lib/gstreamer-$GSTREAMER_VERSION"
@@ -88,7 +100,8 @@ done
 
 mkdir -p "$APPDIR/apprun-hooks"
 
-cat <<'EOF' > "$APPDIR/apprun-hooks/linuxdeploy-plugin-gstreamer.sh"
+export QML_MODULES_PATHS="./qml"
+cat <<'EOF' > "$APPDIR/apprun-hooks/linuxdeploy-plugin-env.sh"
 #!/bin/bash
 
 export GST_REGISTRY_REUSE_PLUGIN_SCANNER="no"
@@ -97,15 +110,20 @@ export GST_PLUGIN_PATH_1_0="${APPDIR}/usr/lib/gstreamer-1.0"
 
 export GST_PLUGIN_SCANNER_1_0="${APPDIR}/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
 export GST_PTP_HELPER_1_0="${APPDIR}/usr/lib/gstreamer1.0/gstreamer-1.0/gst-ptp-helper"
+
+export IPROXY_APPIMAGE="${APPDIR}/usr/bin/iproxy"
+export IFUSE_APPIMAGE="${APPDIR}/usr/bin/ifuse"
 EOF
 
-chmod +x "$APPDIR/apprun-hooks/linuxdeploy-plugin-gstreamer.sh"
+chmod +x "$APPDIR/apprun-hooks/linuxdeploy-plugin-env.sh"
 
 # .desktop file
 cp iDescriptor.desktop "$APPDIR/usr/share/applications/"
 
- ./linuxdeployqt-continuous-x86_64.AppImage AppDir/usr/share/applications/iDescriptor.desktop \
-            -appimage \
-            -qmldir=./qml \
-            -exclude-libs=libGL,libGLX,libEGL,libOpenGL,libdrm,libva,libvdpau,libxcb,libxcb-glx,libxcb-dri2,libxcb-dri3,libX11,libXext,libXrandr,libXrender,libXfixes,libXau,libXdmcp,libqsqlmimer,libmysqlclient,libmysqlclient
-
+ ./linuxdeploy-x86_64.AppImage \
+            --appdir ./AppDir \
+            --desktop-file AppDir/usr/share/applications/iDescriptor.desktop \
+	    --plugin qt \
+            --exclude-library libGL,libGLX,libEGL,libOpenGL,libdrm,libva,libvdpau,libxcb,libxcb-glx,libxcb-dri2,libxcb-dri3,libX11,libXext,libXrandr,libXrender,libXfixes,libXau,libXdmcp,libqsqlmimer,libmysqlclient,libmysqlclient \
+            --output appimage \
+            --deploy-deps-only AppDir/usr/bin/ifuse

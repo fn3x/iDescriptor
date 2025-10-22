@@ -194,7 +194,6 @@ void iFuseWidget::onMountClicked()
         return;
     }
 
-    // Check if ifuse binary exists
     m_ifuseProcess = new QProcess(this);
     connect(m_ifuseProcess,
             QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
@@ -202,16 +201,34 @@ void iFuseWidget::onMountClicked()
     connect(m_ifuseProcess, &QProcess::errorOccurred, this,
             &iFuseWidget::onProcessError);
 
-    // First check if ifuse exists
-    QProcess checkProcess;
-    checkProcess.start("which", QStringList() << "ifuse");
-    checkProcess.waitForFinished(3000);
+    QString ifuseExecutablePath;
 
-    // todo: ship with ifuse binary
-    if (checkProcess.exitCode() != 0) {
-        setStatusMessage(
-            "Error: ifuse binary not found. Please install ifuse first.", true);
-        return;
+    /*
+     Check if running in AppImage
+     this is set by the plugin script
+    */
+    if (qEnvironmentVariableIsSet("IFUSE_APPIMAGE")) {
+        ifuseExecutablePath = qgetenv("IFUSE_APPIMAGE");
+        if (ifuseExecutablePath.isEmpty()) {
+            setStatusMessage("Error: Running in AppImage mode, but "
+                             "IFUSE_APPIMAGE is not set.",
+                             true);
+            return;
+        }
+
+        if (!QFileInfo(ifuseExecutablePath).isExecutable()) {
+            setStatusMessage(
+                "Error: Bundled ifuse not found or is not executable.", true);
+            return;
+        }
+    } else {
+        ifuseExecutablePath = QStandardPaths::findExecutable("ifuse");
+        if (ifuseExecutablePath.isEmpty()) {
+            setStatusMessage(
+                "Error: ifuse binary not found. Please install ifuse first.",
+                true);
+            return;
+        }
     }
 
     // Create the mount directory
@@ -245,7 +262,7 @@ void iFuseWidget::onMountClicked()
     QStringList arguments;
     arguments << "-u" << deviceUdid << fullMountPath;
 
-    m_ifuseProcess->start("ifuse", arguments);
+    m_ifuseProcess->start(ifuseExecutablePath, arguments);
 }
 
 void iFuseWidget::onProcessFinished(int exitCode,

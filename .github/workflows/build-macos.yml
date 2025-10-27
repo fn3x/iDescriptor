@@ -11,6 +11,7 @@ env:
   LIBIMOBILEDEVICE_VER: "1.4.0"
   LIBIRECOVERY_VER: "1.3.1"
   LIBUSBMUXD_VER: "2.1.1"
+  QT_DIR: ${{ runner.temp }}/Qt
 
 jobs:
   build-macos:
@@ -24,7 +25,7 @@ jobs:
           token: ${{ secrets.PAT }}
 
       - name: Mkdir qt
-        run: mkdir -p "${{ env.HOME }}/Qt"
+        run: mkdir -p "${{ env.QT_DIR }}"
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -36,7 +37,7 @@ jobs:
           use-official: true
           email: ${{ secrets.QT_EMAIL }}
           pw: ${{ secrets.QT_PW }}
-          dir: "${{ env.HOME }}/Qt"
+          dir: "${{ env.QT_DIR }}"
 
       - name: Update pkgconfig path
         run: |

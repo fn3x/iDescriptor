@@ -63,6 +63,7 @@ jobs:
         with:
           version: ${{ env.QT_VERSION }}
           modules: "qtmultimedia qtlocation qtpositioning qtserialport"
+          arch: win64_mingw
 
       - name: Install WinFsp
         shell: pwsh

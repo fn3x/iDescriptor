@@ -164,10 +164,10 @@ jobs:
           )
 
           for plugin in "${PLUGINS[@]}"; do
-            cp "$(brew --prefix)/lib/gstreamer-1.0/${plugin}.dylib" "${GST_PLUGIN_DIR}/"
+            cp "$(brew --prefix gstreamer)/lib/gstreamer-1.0/${plugin}.dylib" "${GST_PLUGIN_DIR}/"
           done
 
-          cp "$(brew --prefix)/libexec/gstreamer-1.0/gst-plugin-scanner" "build/iDescriptor.app/Contents/Frameworks/"
+          cp "$(brew --prefix gstreamer)/libexec/gstreamer-1.0/gst-plugin-scanner" "build/iDescriptor.app/Contents/Frameworks/"
 
           # Bundle libjxl_cms
           cp "$(brew --prefix)/lib/libjxl_cms.0.11.dylib" build/iDescriptor.app/Contents/Frameworks/

@@ -20,7 +20,9 @@
 #include "../../devicedatabase.h"
 #include "../../iDescriptor.h"
 #include "../../servicemanager.h"
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 #include "libirecovery.h"
+#endif
 #include <QDebug>
 #include <libimobiledevice/diagnostics_relay.h>
 #include <libimobiledevice/libimobiledevice.h>
@@ -274,6 +276,8 @@ DeviceInfo fullDeviceInfo(const pugi::xml_document &doc,
     d.rawProductType = rawProductType;
     d.jailbroken = detect_jailbroken(afcClient);
     d.is_iPhone = safeGet("DeviceClass") == "iPhone";
+    d.serialNumber = safeGet("SerialNumber");
+    d.mobileEquipmentIdentifier = safeGet("MobileEquipmentIdentifier");
 
     /*BatteryInfo*/
     plist_t diagnostics = nullptr;
@@ -426,7 +430,7 @@ cleanup:
 
     return result;
 }
-
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 iDescriptorInitDeviceResultRecovery
 init_idescriptor_recovery_device(uint64_t ecid)
 {
@@ -486,3 +490,4 @@ cleanup:
 
     return result;
 }
+#endif // ENABLE_RECOVERY_DEVICE_SUPPORT

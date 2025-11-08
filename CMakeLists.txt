@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 project(iDescriptor VERSION 0.1 LANGUAGES CXX)
 
+# Feature options
+option(ENABLE_RECOVERY_DEVICE_SUPPORT "Enable recovery device support (requires libirecovery)" ON)
+
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -102,12 +105,18 @@ find_library(TATSU_LIBRARY
 pkg_check_modules(QRENCODE REQUIRED IMPORTED_TARGET libqrencode)
 pkg_check_modules(HEIF REQUIRED IMPORTED_TARGET libheif)
 pkg_check_modules(ZIP REQUIRED IMPORTED_TARGET libzip)
-find_library(IRECOVERY_LIBRARY 
-    NAMES irecovery-1.0
-    PATHS ${CUSTOM_LIB_PATH}
-    NO_DEFAULT_PATH
-    REQUIRED
-)
+
+if(ENABLE_RECOVERY_DEVICE_SUPPORT)
+    find_library(IRECOVERY_LIBRARY 
+        NAMES irecovery-1.0
+        PATHS ${CUSTOM_LIB_PATH}
+        NO_DEFAULT_PATH
+        REQUIRED
+    )
+    message(STATUS "Recovery device support enabled")
+else()
+    message(STATUS "Recovery device support disabled")
+endif()
 
 find_library(USBMUXD_LIBRARY 
     NAMES usbmuxd-2.0
@@ -183,7 +192,14 @@ if(LINUX)
     )
 endif()
 
-
+if (NOT ENABLE_RECOVERY_DEVICE_SUPPORT)
+    list(REMOVE_ITEM PROJECT_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/recoverydeviceinfowidget.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/recoverydeviceinfowidget.h
+        src/recoverydeviceinfowidget.cpp
+        src/recoverydeviceinfowidget.h
+    )
+endif()
 
 add_subdirectory(lib/airplay)
 add_subdirectory(lib/ipatool-go)
@@ -235,7 +251,6 @@ target_link_libraries(iDescriptor PRIVATE
     ${IMOBILEDEVICE_LIBRARY}
     ${IMOBILEDEVICE_GLUE_LIBRARY}
     ${TATSU_LIBRARY}
-    ${IRECOVERY_LIBRARY}
     ${SSL_LIBRARY}
     ${CRYPTO_LIBRARY}
     PkgConfig::SSH
@@ -252,6 +267,11 @@ target_link_libraries(iDescriptor PRIVATE
     ipatool-go
     ZUpdater
 )
+
+# Conditionally link libirecovery
+if(ENABLE_RECOVERY_DEVICE_SUPPORT)
+    target_link_libraries(iDescriptor PRIVATE ${IRECOVERY_LIBRARY})
+endif()
 
 target_include_directories(iDescriptor PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/lib/zupdater/src
@@ -289,6 +309,11 @@ endif()
 target_compile_definitions(iDescriptor PRIVATE 
     SOURCE_DIR="${CMAKE_SOURCE_DIR}"
 )
+
+# Add compile definition for recovery device support
+if(ENABLE_RECOVERY_DEVICE_SUPPORT)
+    target_compile_definitions(iDescriptor PRIVATE ENABLE_RECOVERY_DEVICE_SUPPORT)
+endif()
 
 set_target_properties(iDescriptor PROPERTIES
     ${BUNDLE_ID_OPTION}

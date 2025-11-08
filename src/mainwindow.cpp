@@ -29,7 +29,9 @@
 #include "iDescriptor-ui.h"
 #include "iDescriptor.h"
 #include "jailbrokenwidget.h"
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 #include "libirecovery.h"
+#endif
 #include "toolboxwidget.h"
 #include "welcomewidget.h"
 #include <QHBoxLayout>
@@ -96,6 +98,7 @@ void handleCallback(const idevice_event_t *event, void *userData)
     }
 }
 
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 void handleCallbackRecovery(const irecv_device_event_t *event, void *userData)
 {
 
@@ -117,6 +120,7 @@ void handleCallbackRecovery(const irecv_device_event_t *event, void *userData)
     }
 }
 irecv_device_event_context_t context;
+#endif
 
 MainWindow *MainWindow::sharedInstance()
 {
@@ -213,6 +217,7 @@ MainWindow::MainWindow(QWidget *parent)
     }
 #endif
 
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     irecv_error_t res_recovery =
         irecv_device_event_subscribe(&context, handleCallbackRecovery, nullptr);
 
@@ -222,6 +227,7 @@ MainWindow::MainWindow(QWidget *parent)
                  << res_recovery;
     }
     qDebug() << "Subscribed to recovery device events successfully.";
+#endif
 
     idevice_error_t res = idevice_event_subscribe(handleCallback, nullptr);
     if (res != IDEVICE_E_SUCCESS) {
@@ -317,7 +323,9 @@ void MainWindow::updateNoDevicesConnected()
 MainWindow::~MainWindow()
 {
     idevice_event_unsubscribe();
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     irecv_device_event_unsubscribe(context);
+#endif
     delete ui;
     delete m_updater;
     sleep(2); // Give some time for cleanup to finish

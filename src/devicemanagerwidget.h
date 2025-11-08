@@ -24,7 +24,9 @@
 #include "devicependingwidget.h"
 #include "devicesidebarwidget.h"
 #include "iDescriptor.h"
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 #include "recoverydeviceinfowidget.h"
+#endif
 #include <QHBoxLayout>
 #include <QMap>
 #include <QStackedWidget>
@@ -51,8 +53,10 @@ private:
 
     void addDevice(iDescriptorDevice *device);
     void removeDevice(const std::string &uuid);
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     void addRecoveryDevice(const iDescriptorRecoveryDevice *device);
     void removeRecoveryDevice(uint64_t ecid);
+#endif
     // TODO:udid or uuid ?
     void addPendingDevice(const QString &udid, bool locked);
     void addPairedDevice(iDescriptorDevice *device);
@@ -69,9 +73,11 @@ private:
          std::pair<DevicePendingWidget *, DevicePendingSidebarItem *>>
         m_pendingDeviceWidgets; // Map to store devices by UDID
 
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     QMap<uint64_t,
          std::pair<RecoveryDeviceInfoWidget *, RecoveryDeviceSidebarItem *>>
         m_recoveryDeviceWidgets; // Map to store recovery devices by ECID
+#endif
 
     std::string m_currentDeviceUuid;
 };

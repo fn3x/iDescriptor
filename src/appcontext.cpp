@@ -128,7 +128,11 @@ void AppContext::addDevice(QString udid, idevice_connection_type conn_type,
 
 int AppContext::getConnectedDeviceCount() const
 {
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     return m_devices.size() + m_recoveryDevices.size();
+#else
+    return m_devices.size();
+#endif
 }
 
 /*
@@ -174,6 +178,7 @@ void AppContext::removeDevice(QString _udid)
     delete device;
 }
 
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 void AppContext::removeRecoveryDevice(uint64_t ecid)
 {
     if (!m_recoveryDevices.contains(ecid)) {
@@ -195,6 +200,7 @@ void AppContext::removeRecoveryDevice(uint64_t ecid)
     delete deviceInfo->mutex;
     delete deviceInfo;
 }
+#endif
 
 iDescriptorDevice *AppContext::getDevice(const std::string &uuid)
 {
@@ -206,18 +212,25 @@ QList<iDescriptorDevice *> AppContext::getAllDevices()
     return m_devices.values();
 }
 
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 QList<iDescriptorRecoveryDevice *> AppContext::getAllRecoveryDevices()
 {
     return m_recoveryDevices.values();
 }
+#endif
 
 // Returns whether there are any devices connected (regular or recovery)
 bool AppContext::noDevicesConnected() const
 {
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     return (m_devices.isEmpty() && m_recoveryDevices.isEmpty() &&
             m_pendingDevices.isEmpty());
+#else
+    return (m_devices.isEmpty() && m_pendingDevices.isEmpty());
+#endif
 }
 
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 void AppContext::addRecoveryDevice(uint64_t ecid)
 {
     iDescriptorInitDeviceResultRecovery res =
@@ -242,6 +255,7 @@ void AppContext::addRecoveryDevice(uint64_t ecid)
     emit recoveryDeviceAdded(recoveryDevice);
     emit deviceChange();
 }
+#endif
 
 AppContext::~AppContext()
 {
@@ -256,11 +270,13 @@ AppContext::~AppContext()
         delete device;
     }
 
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     for (auto recoveryDevice : m_recoveryDevices) {
         emit recoveryDeviceRemoved(recoveryDevice->ecid);
         delete recoveryDevice->mutex;
         delete recoveryDevice;
     }
+#endif
 }
 
 void AppContext::setCurrentDeviceSelection(const DeviceSelection &selection)

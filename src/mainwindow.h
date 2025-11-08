@@ -23,7 +23,9 @@
 #include "ZUpdater.h"
 #include "devicemanagerwidget.h"
 #include "iDescriptor.h"
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 #include "libirecovery.h"
+#endif
 #include "ztabwidget.h"
 #include <QLabel>
 #include <QMainWindow>

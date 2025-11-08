@@ -21,7 +21,9 @@
 #include "appcontext.h"
 #include "devicemenuwidget.h"
 #include "devicependingwidget.h"
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 #include "recoverydeviceinfowidget.h"
+#endif
 #include "settingsmanager.h"
 #include <QDebug>
 
@@ -80,6 +82,7 @@ DeviceManagerWidget::DeviceManagerWidget(QWidget *parent)
                 emit updateNoDevicesConnected();
             });
 
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     connect(AppContext::sharedInstance(), &AppContext::recoveryDeviceAdded,
             this, [this](const iDescriptorRecoveryDevice *recoveryDeviceInfo) {
                 addRecoveryDevice(recoveryDeviceInfo);
@@ -91,6 +94,7 @@ DeviceManagerWidget::DeviceManagerWidget(QWidget *parent)
                 removeRecoveryDevice(ecid);
                 emit updateNoDevicesConnected();
             });
+#endif
 
     connect(AppContext::sharedInstance(), &AppContext::devicePairingExpired,
             this, [this](const QString &udid) {
@@ -142,6 +146,7 @@ void DeviceManagerWidget::addDevice(iDescriptorDevice *device)
         std::pair{deviceWidget, m_sidebar->addDevice(tabTitle, device->udid)};
 }
 
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
 void DeviceManagerWidget::addRecoveryDevice(
     const iDescriptorRecoveryDevice *device)
 {
@@ -185,6 +190,7 @@ void DeviceManagerWidget::removeRecoveryDevice(uint64_t ecid)
         emit updateNoDevicesConnected();
     }
 }
+#endif
 
 void DeviceManagerWidget::addPendingDevice(const QString &udid, bool locked)
 {
@@ -297,11 +303,6 @@ void DeviceManagerWidget::setCurrentDevice(const std::string &uuid)
 
     QWidget *widget = m_deviceWidgets[uuid].first;
     m_stackedWidget->setCurrentWidget(widget);
-
-    // This creates a feedback loop. The widget should only react to state
-    // changes from AppContext, not create them here.
-    // AppContext::sharedInstance()->setCurrentDeviceSelection(
-    //     DeviceSelection(uuid));
 }
 
 std::string DeviceManagerWidget::getCurrentDevice() const
@@ -334,6 +335,7 @@ void DeviceManagerWidget::onDeviceSelectionChanged(
         }
         break;
 
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     case DeviceSelection::Recovery:
         if (m_recoveryDeviceWidgets.contains(selection.ecid)) {
             QWidget *tabWidget = m_recoveryDeviceWidgets[selection.ecid].first;
@@ -344,6 +346,7 @@ void DeviceManagerWidget::onDeviceSelectionChanged(
             }
         }
         break;
+#endif
 
     case DeviceSelection::Pending:
         if (m_pendingDeviceWidgets.contains(selection.uuid)) {

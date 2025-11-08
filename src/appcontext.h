@@ -34,8 +34,9 @@ public:
     explicit AppContext(QObject *parent = nullptr);
     bool noDevicesConnected() const;
 
-    // Returns whether there are any devices connected (regular or recovery)
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     QList<iDescriptorRecoveryDevice *> getAllRecoveryDevices();
+#endif
     ~AppContext();
     int getConnectedDeviceCount() const;
 
@@ -44,7 +45,9 @@ public:
 
 private:
     QMap<std::string, iDescriptorDevice *> m_devices;
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     QMap<uint64_t, iDescriptorRecoveryDevice *> m_recoveryDevices;
+#endif
     QStringList m_pendingDevices;
     DeviceSelection m_currentSelection = DeviceSelection("");
 signals:
@@ -52,8 +55,10 @@ signals:
     void deviceRemoved(const std::string &udid);
     void devicePaired(iDescriptorDevice *device);
     void devicePasswordProtected(const QString &udid);
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     void recoveryDeviceAdded(const iDescriptorRecoveryDevice *deviceInfo);
     void recoveryDeviceRemoved(uint64_t ecid);
+#endif
     void devicePairPending(const QString &udid);
     void devicePairingExpired(const QString &udid);
     void systemSleepStarting();
@@ -71,8 +76,10 @@ public slots:
     void removeDevice(QString udid);
     void addDevice(QString udid, idevice_connection_type connType,
                    AddType addType);
+#ifdef ENABLE_RECOVERY_DEVICE_SUPPORT
     void addRecoveryDevice(uint64_t ecid);
     void removeRecoveryDevice(uint64_t ecid);
+#endif
 };
 
 #endif // APPCONTEXT_H

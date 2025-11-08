@@ -94,6 +94,7 @@ struct DeviceInfo {
     std::string productType;
     std::string rawProductType;
     bool jailbroken;
+    std::string serialNumber;
     std::string basebandActivationTicketVersion;
     std::string basebandCertId;
     std::string basebandChipID;

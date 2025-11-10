@@ -48,7 +48,6 @@ void KeychainDialog::setupUI()
     setWindowTitle("Keychain Access Required");
     setModal(true);
     setMinimumSize(600, 450);
-    resize(700, 500);
 
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setContentsMargins(20, 20, 20, 20);
@@ -56,9 +55,12 @@ void KeychainDialog::setupUI()
 
     // Title label
     m_titleLabel = new QLabel("Keychain Access Required");
+    m_titleLabel->setObjectName("titleLabel");
     m_titleLabel->setAlignment(Qt::AlignCenter);
     m_titleLabel->setStyleSheet(
-        "font-size: 18px; font-weight: bold; margin-bottom: 10px;");
+        "QLabel#titleLabel { "
+        "  font-size: 18px; font-weight: bold; margin-bottom: 10px;"
+        "}");
     m_mainLayout->addWidget(m_titleLabel);
 
     // Description label
@@ -74,12 +76,13 @@ void KeychainDialog::setupUI()
 
     // Video widget
     m_videoWidget = new QVideoWidget();
+    m_videoWidget->setObjectName("videoWidget");
     m_videoWidget->setSizePolicy(QSizePolicy::Expanding,
                                  QSizePolicy::Expanding);
     m_videoWidget->setAspectRatioMode(
         Qt::AspectRatioMode::KeepAspectRatioByExpanding);
     m_videoWidget->setStyleSheet(
-        "QVideoWidget { background-color: transparent; }");
+        "QVideoWidget#videoWidget { background-color: transparent; }");
     m_videoWidget->setMinimumHeight(250);
     m_mainLayout->addWidget(m_videoWidget, 1);
 

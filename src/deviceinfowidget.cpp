@@ -157,7 +157,7 @@ DeviceInfoWidget::DeviceInfoWidget(iDescriptorDevice *device, QWidget *parent)
     // Create icon label
     m_lightningIconLabel = new ZIconLabel(
         QIcon(":/resources/icons/MdiLightningBolt.png"), " Charging", this);
-
+    m_lightningIconLabel->setFixedSize(QSize(20, 20));
     m_batteryWidget = new BatteryWidget(
         qBound<int>(1, device->deviceInfo.batteryInfo.currentBatteryLevel, 100),
         device->deviceInfo.batteryInfo.isCharging, this);

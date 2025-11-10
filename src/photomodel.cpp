@@ -47,7 +47,7 @@ QSemaphore PhotoModel::m_videoThumbnailSemaphore(4);
 
 PhotoModel::PhotoModel(iDescriptorDevice *device, FilterType filterType,
                        QObject *parent)
-    : QAbstractListModel(parent), m_device(device), m_thumbnailSize(64, 64),
+    : QAbstractListModel(parent), m_device(device), m_thumbnailSize(120, 120),
       m_sortOrder(NewestFirst), m_filterType(filterType)
 {
     // 350 MB cache for thumbnails

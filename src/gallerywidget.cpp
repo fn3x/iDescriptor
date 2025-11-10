@@ -108,7 +108,7 @@ void GalleryWidget::setupControlsLayout()
     m_sortComboBox->addItem("Oldest First",
                             static_cast<int>(PhotoModel::OldestFirst));
     m_sortComboBox->setCurrentIndex(0);   // Default to Newest First
-    m_sortComboBox->setMinimumWidth(150); // Ensure text fits
+    m_sortComboBox->setMinimumWidth(100); // Ensure text fits
     m_sortComboBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
     // Filter combo box
@@ -121,7 +121,7 @@ void GalleryWidget::setupControlsLayout()
     m_filterComboBox->addItem("Videos Only",
                               static_cast<int>(PhotoModel::VideosOnly));
     m_filterComboBox->setCurrentIndex(0);   // Default to All
-    m_filterComboBox->setMinimumWidth(150); // Ensure text fits
+    m_filterComboBox->setMinimumWidth(100); // Ensure text fits
     m_filterComboBox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
     // Export buttons
@@ -158,10 +158,10 @@ void GalleryWidget::setupControlsLayout()
     m_controlsLayout->addWidget(m_exportSelectedButton);
     m_controlsLayout->addWidget(m_exportAllButton);
 
-    // Create a frame to contain the controls
     QWidget *controlsWidget = new QWidget();
     controlsWidget->setLayout(m_controlsLayout);
-    controlsWidget->setStyleSheet("QWidget { "
+    controlsWidget->setObjectName("controlsWidget");
+    controlsWidget->setStyleSheet("QWidget#controlsWidget { "
                                   "  padding: 2px; "
                                   "}");
 

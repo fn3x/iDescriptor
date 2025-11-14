@@ -3,7 +3,7 @@ name: Build macOS
 on:
   workflow_dispatch:
 env:
-  QT_VERSION: "6.7.2"
+  QT_VERSION: "6.8.0"
   GO_VERSION: "1.23.0"
   LIBPLIST_VER: "2.7.0"
   LIBTATSU_VER: "1.0.5"

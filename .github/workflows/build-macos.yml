@@ -36,10 +36,6 @@ jobs:
           version: ${{ env.QT_VERSION }}
           modules: "qtmultimedia qtlocation qtpositioning qtserialport"
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
       - name: Update pkgconfig path
         run: |
           echo "PKG_CONFIG_PATH=$(brew --prefix)/lib/pkgconfig:${PKG_CONFIG_PATH:-}" >> "$GITHUB_ENV"
@@ -71,8 +67,7 @@ jobs:
             gst-plugins-bad \
             gst-plugins-ugly \
             gst-libav \
-            graphicsmagick \
-            imagemagick
+            create-dmg
 
       - name: Compile additional dependencies
         run: |
@@ -181,8 +176,17 @@ jobs:
 
       - name: Create DMG
         run: |
-          npm install -g create-dmg
-          create-dmg --volname "iDescriptor" --window-size 500 300 --icon-size 100 --app-drop-link 400 150 --icon "iDescriptor.app" 100 150 "build/iDescriptor.dmg" "build/iDescriptor.app" --no-code-sign
+          create-dmg \
+            --volname "iDescriptor" \
+            --volicon "resources/icons/app-icon/icon.icns" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "iDescriptor.app" 175 190 \
+            --hide-extension "iDescriptor.app" \
+            --app-drop-link 425 190 \
+            "build/iDescriptor-macOS-${{ matrix.arch }}.dmg" \
+            "build/iDescriptor.app"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4

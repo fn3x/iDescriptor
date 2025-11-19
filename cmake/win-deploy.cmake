@@ -49,9 +49,9 @@ message("Running windeployqt6 to deploy Qt dependencies (without compiler runtim
 
 
 
-message("Executing: ${QT_BIN_PATH}/windeployqt6.exe --dir ${OUTPUT_DIR} --plugindir ${OUTPUT_DIR}/plugins ${EXECUTABLE_PATH}")
+message("Executing: ${QT_BIN_PATH}/windeployqt6.exe --qmldir ${QML_SOURCE_DIR} --dir ${OUTPUT_DIR} --plugindir ${OUTPUT_DIR}/plugins ${EXECUTABLE_PATH}")
 execute_process(
-    COMMAND ${QT_BIN_PATH}/windeployqt6.exe --dir ${OUTPUT_DIR} --plugindir ${OUTPUT_DIR}/plugins ${EXECUTABLE_PATH}
+    COMMAND ${QT_BIN_PATH}/windeployqt6.exe --qmldir ${QML_SOURCE_DIR} --dir ${OUTPUT_DIR} --plugindir ${OUTPUT_DIR}/plugins ${EXECUTABLE_PATH}
     RESULT_VARIABLE WINDEPLOYQT_RESULT
     OUTPUT_VARIABLE WINDEPLOYQT_OUTPUT
     ERROR_VARIABLE WINDEPLOYQT_ERROR

@@ -252,7 +252,8 @@ MainWindow::MainWindow(QWidget *parent)
     bool isPortable = false;
     bool skipPrerelease = true;
 #ifdef WIN32
-    isPortable = is_iDescriptorInstalled();
+    isPortable = !is_iDescriptorInstalled();
+    qDebug() << "isPortable=" << isPortable;
 #endif
 
     /*

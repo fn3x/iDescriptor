@@ -17,11 +17,11 @@
  * along with this program. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 #ifndef CHECK_DEPS_H
 #define CHECK_DEPS_H
 
 bool IsAppleMobileDeviceSupportInstalled();
 bool IsWinFspInstalled();
+bool is_iDescriptorInstalled();
 
 #endif // CHECK_DEPS_H

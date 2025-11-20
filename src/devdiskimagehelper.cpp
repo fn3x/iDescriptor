@@ -98,7 +98,6 @@ void DevDiskImageHelper::start()
 
     // FIXME:we dont have developer disk images for ios 6 and below
     if (deviceMajorVersion > 5) {
-        // TODO: maybe check isMountAvailable and finishWithFailure if false
         const bool isMountAvailable =
             DevDiskManager::sharedInstance()->downloadCompatibleImage(
                 m_device, [this](bool success) {
@@ -108,6 +107,9 @@ void DevDiskImageHelper::start()
                         finishWithError("Failed to download compatible image.");
                     }
                 });
+        if (!isMountAvailable) {
+            finishWithError("Failed to download compatible image.");
+        }
     } else {
         finishWithSuccess();
         return;

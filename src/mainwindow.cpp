@@ -266,7 +266,6 @@ MainWindow::MainWindow(QWidget *parent)
     };
     */
     switch (ZUpdater::detectPlatform()) {
-    // todo: adjust for portable
     case Platform::Windows:
         updateProcedure = UpdateProcedure{
             !isPortable,
@@ -313,10 +312,9 @@ MainWindow::MainWindow(QWidget *parent)
         };
     }
 
-    // FIXME: fix repo name
-    m_updater = new ZUpdater("uncor3/libtest", APP_VERSION, "iDescriptor",
-                             updateProcedure, isPortable, packageManagerManaged,
-                             skipPrerelease, this);
+    m_updater = new ZUpdater("iDescriptor/iDescriptor", APP_VERSION,
+                             "iDescriptor", updateProcedure, isPortable,
+                             packageManagerManaged, skipPrerelease, this);
 #if defined(PACKAGE_MANAGER_MANAGED) && defined(__linux__)
     m_updater->setPackageManagerManagedMessage(
         QString(

@@ -3,13 +3,16 @@
 #include <QDebug>
 #include <QMainWindow>
 
-void setupMacOSWindow(QMainWindow *window) {
+void setupMacOSWindow(QMainWindow *window)
+{
     window->setUnifiedTitleAndToolBarOnMac(true);
 
-    NSView* nativeView = reinterpret_cast<NSView*>(window->winId());
-    NSWindow* nativeWindow = [nativeView window];
+    NSView *nativeView = reinterpret_cast<NSView *>(window->winId());
+    NSWindow *nativeWindow = [nativeView window];
 
-    [nativeWindow setStyleMask:[nativeWindow styleMask] | NSWindowStyleMaskFullSizeContentView | NSWindowTitleHidden];
+    [nativeWindow setStyleMask:[nativeWindow styleMask] |
+                               NSWindowStyleMaskFullSizeContentView |
+                               NSWindowTitleHidden];
     [nativeWindow setTitlebarAppearsTransparent:YES];
     [nativeWindow center];
 }

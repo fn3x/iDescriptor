@@ -60,7 +60,7 @@
 
 #### macOS
 
-- **Apple Silicon**: Download the `.dmg` file for M1/M2/M3 Macs.
+- **Apple Silicon**: Download the `.dmg` file for M1/M2/M3/MX Macs.
 - **Intel**: Download the `.dmg` file for Intel-based Macs.
 
 Open the `.dmg` and drag iDescriptor to Applications folder.

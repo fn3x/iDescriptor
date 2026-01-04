@@ -214,7 +214,7 @@ public:
         iDescriptorDevice *device, const char *path,
         std::optional<afc_client_t> altAfc = std::nullopt);
     static AFCFileTree
-    safeGetFileTree(iDescriptorDevice *device, const std::string &path = "/",
+    safeGetFileTree(iDescriptorDevice *device, const std::string &path = "/", bool checkDir = true,
                     std::optional<afc_client_t> altAfc = std::nullopt);
 };
 

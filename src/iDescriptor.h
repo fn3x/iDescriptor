@@ -316,7 +316,7 @@ struct AFCFileTree {
 };
 
 AFCFileTree get_file_tree(afc_client_t afcClient,
-                          const std::string &path = "/");
+                          const std::string &path = "/", bool checkDir = true);
 
 bool detect_jailbroken(afc_client_t afc);
 

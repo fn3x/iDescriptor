@@ -307,9 +307,10 @@ ClickableWidget *ToolboxWidget::createToolbox(iDescriptorTool tool,
     b->setCursor(Qt::PointingHandCursor);
 
     m_toolboxes.append(b);
-    m_requiresDevice.append(requiresDevice);
-    connect(b, &ClickableWidget::clicked,
-            [this, tool]() { onToolboxClicked(tool); });
+    b->setProperty("requiresDevice", requiresDevice);
+    connect(b, &ClickableWidget::clicked, [this, tool, requiresDevice]() {
+        onToolboxClicked(tool, requiresDevice);
+    });
     return b;
 }
 
@@ -324,6 +325,7 @@ void ToolboxWidget::updateDeviceList()
     if (devices.isEmpty()) {
         m_deviceCombo->addItem("No device connected");
         m_deviceCombo->setEnabled(false);
+        m_uuid.clear();
     } else {
         m_deviceCombo->setEnabled(true);
         for (iDescriptorDevice *device : devices) {
@@ -348,7 +350,7 @@ void ToolboxWidget::updateToolboxStates()
 
     for (int i = 0; i < m_toolboxes.size(); ++i) {
         QWidget *toolbox = m_toolboxes[i];
-        bool requiresDevice = m_requiresDevice[i];
+        bool requiresDevice = toolbox->property("requiresDevice").toBool();
 
         bool enabled = !requiresDevice || hasDevice;
         toolbox->setEnabled(enabled);
@@ -374,8 +376,20 @@ void ToolboxWidget::onDeviceSelectionChanged()
 {
     QString selectedUdid = m_deviceCombo->currentData().toString();
     if (selectedUdid.isEmpty()) {
+        m_uuid.clear();
         return;
     }
+
+    if (AppContext::sharedInstance()->getDevice(selectedUdid.toStdString()) ==
+        nullptr) {
+        QMessageBox::warning(this, "Device Not Found",
+                             "The selected device is no longer connected.");
+        m_uuid.clear(); // Clear stale UUID
+        updateDeviceList();
+        return;
+    }
+
+    m_uuid = selectedUdid.toStdString();
 
     // Update the selected device in main menu
     AppContext::sharedInstance()->setCurrentDeviceSelection(
@@ -394,14 +408,19 @@ void ToolboxWidget::onCurrentDeviceChanged(const DeviceSelection &selection)
             m_deviceCombo->blockSignals(false);
 
             m_uuid = selection.udid;
-            m_currentDevice =
-                AppContext::sharedInstance()->getDevice(selection.udid);
         }
     }
 }
 
-void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
+void ToolboxWidget::onToolboxClicked(iDescriptorTool tool, bool requiresDevice)
 {
+    iDescriptorDevice *device = AppContext::sharedInstance()->getDevice(m_uuid);
+    if (!device && requiresDevice) {
+        QMessageBox::warning(
+            this, "Device Disconnected ?",
+            "Device just disconnected, please select a device.");
+        return;
+    }
 
     switch (tool) {
     case iDescriptorTool::Airplayer: {
@@ -431,25 +450,16 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
     } break;
 
     case iDescriptorTool::LiveScreen: {
-        LiveScreenWidget *liveScreen = new LiveScreenWidget(m_currentDevice);
+        LiveScreenWidget *liveScreen = new LiveScreenWidget(device);
         liveScreen->setAttribute(Qt::WA_DeleteOnClose);
         liveScreen->show();
     } break;
     case iDescriptorTool::RecoveryMode: {
-        // Handle entering recovery mode
-        bool success = enterRecoveryMode(m_currentDevice);
-        QMessageBox msgBox;
-        msgBox.setWindowTitle("Recovery Mode");
-        if (success) {
-            msgBox.setText("Successfully entered recovery mode.");
-        } else {
-            msgBox.setText("Failed to enter recovery mode.");
-        }
-        msgBox.exec();
+        _enterRecoveryMode(device);
     } break;
     case iDescriptorTool::MountDevImage: {
         DevDiskImageHelper *devDiskImageHelper =
-            new DevDiskImageHelper(m_currentDevice, this);
+            new DevDiskImageHelper(device, this);
 
         connect(devDiskImageHelper, &DevDiskImageHelper::mountingCompleted,
                 this, [this, devDiskImageHelper](bool success) {
@@ -468,22 +478,22 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
     } break;
     case iDescriptorTool::VirtualLocation: {
         // Handle virtual location functionality
-        VirtualLocation *virtualLocation = new VirtualLocation(m_currentDevice);
+        VirtualLocation *virtualLocation = new VirtualLocation(device);
         virtualLocation->setAttribute(Qt::WA_DeleteOnClose);
         virtualLocation->setWindowFlag(Qt::Window);
         virtualLocation->resize(800, 600);
         virtualLocation->show();
     } break;
     case iDescriptorTool::Restart: {
-        restartDevice(m_currentDevice);
+        restartDevice(device);
     } break;
     case iDescriptorTool::Shutdown: {
-        shutdownDevice(m_currentDevice);
+        shutdownDevice(device);
     } break;
     case iDescriptorTool::QueryMobileGestalt: {
         // Handle querying MobileGestalt
         QueryMobileGestaltWidget *queryMobileGestaltWidget =
-            new QueryMobileGestaltWidget(m_currentDevice);
+            new QueryMobileGestaltWidget(device);
         queryMobileGestaltWidget->setAttribute(Qt::WA_DeleteOnClose);
         queryMobileGestaltWidget->setWindowFlag(Qt::Window);
         queryMobileGestaltWidget->resize(800, 600);
@@ -491,7 +501,7 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
     } break;
     case iDescriptorTool::DeveloperDiskImages: {
         if (!m_devDiskImagesWidget) {
-            m_devDiskImagesWidget = new DevDiskImagesWidget(m_currentDevice);
+            m_devDiskImagesWidget = new DevDiskImagesWidget(device);
             m_devDiskImagesWidget->setAttribute(Qt::WA_DeleteOnClose);
             m_devDiskImagesWidget->setWindowFlag(Qt::Window);
             m_devDiskImagesWidget->resize(800, 600);
@@ -520,9 +530,9 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
 #ifndef __APPLE__
     case iDescriptorTool::iFuse: {
         if (!m_ifuseWidget) {
-            m_ifuseWidget = new iFuseWidget(m_currentDevice);
+            m_ifuseWidget = new iFuseWidget(device);
             qDebug() << "Created iFuseWidget"
-                     << m_currentDevice->deviceInfo.productType.c_str();
+                     << device->deviceInfo.productType.c_str();
             m_ifuseWidget->setAttribute(Qt::WA_DeleteOnClose);
             connect(m_ifuseWidget, &QObject::destroyed, this,
                     [this]() { m_ifuseWidget = nullptr; });
@@ -536,7 +546,7 @@ void ToolboxWidget::onToolboxClicked(iDescriptorTool tool)
     } break;
 #endif
     case iDescriptorTool::CableInfoWidget: {
-        CableInfoWidget *cableInfoWidget = new CableInfoWidget(m_currentDevice);
+        CableInfoWidget *cableInfoWidget = new CableInfoWidget(device);
         cableInfoWidget->setAttribute(Qt::WA_DeleteOnClose);
         cableInfoWidget->setWindowFlag(Qt::Window);
         cableInfoWidget->resize(600, 400);

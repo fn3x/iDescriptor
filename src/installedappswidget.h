@@ -87,7 +87,6 @@ private:
     QLabel *m_iconLabel;
     QLabel *m_nameLabel;
     QLabel *m_versionLabel;
-    QList<AppTabWidget *> m_appTabs;
     QNetworkAccessManager *m_networkManager = new QNetworkAccessManager(this);
 };
 

@@ -193,6 +193,9 @@ protected:
     {
         if (event->type() == QEvent::ApplicationFontChange) {
             updateIconSize();
+            /* TODO: may be use PaletteChange event?
+             but ApplicationPaletteChange seems to be a better fit here than
+             PaletteChange*/
         } else if (event->type() == QEvent::ApplicationPaletteChange) {
             update();
         }

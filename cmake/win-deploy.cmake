@@ -47,6 +47,8 @@ message("SUCCESS: Executable found at: ${EXECUTABLE_PATH}")
 message("Running windeployqt6 to deploy Qt dependencies (without compiler runtime)...")
 
 
+# required if Qt is installed via MSYS2
+set(ENV{PATH} "/c/msys64/mingw64/bin:/c/msys64/mingw64/share/qt6/bin:$ENV{PATH}")
 
 
 message("Executing: ${QT_BIN_PATH}/windeployqt6.exe --qmldir ${QML_SOURCE_DIR} --dir ${OUTPUT_DIR} --plugindir ${OUTPUT_DIR}/plugins ${EXECUTABLE_PATH}")
@@ -141,6 +143,11 @@ set(WANTED_PLUGINS
     "libgstvideorate"
     "libgstoverlaycomposition"
     "libgstfaad"
+    "libgstvideoparsersbad"
+    "libgstvideofilter"
+    "libgstvideoconvertscale"
+    "libgstmultifile"
+    "libgstjpeg"
 )
 
 file(MAKE_DIRECTORY "${OUTPUT_DIR}/gstreamer-1.0")

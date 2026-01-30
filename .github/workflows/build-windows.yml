@@ -44,38 +44,11 @@ jobs:
           release: false
           update: false
 
-      # FIXME: use ./util/get-msys2-archive.go to download the archive db
-      # for now, since we install go from pacman, we better do it this way
       - name: Use msys2 archive
         shell: pwsh
         run: |
-          # Base URL for the 2025-06-22 MSYS2 archive release
-          $baseUrl = "https://github.com/msys2/msys2-archive/releases/download/2025-06-22"
-
-          $databases = @(
-              "clang64",
-              "clangarm64",
-              "mingw32",
-              "mingw64",
-              "msys",
-              "ucrt64"
-          )
-
-          $targetDir = "C:\msys64\var\lib\pacman\sync"
-
-          foreach ($db in $databases) {
-              $dbUrl = "$baseUrl/$db.db"
-              $sigUrl = "$baseUrl/$db.db.sig"
-
-              $dbFile = Join-Path $targetDir "$db.db"
-              $sigFile = Join-Path $targetDir "$db.db.sig"
-
-              Write-Host "Downloading $db.db ..."
-              Invoke-WebRequest -Uri $dbUrl -OutFile $dbFile
-
-              Write-Host "Downloading $db.db.sig ..."
-              Invoke-WebRequest -Uri $sigUrl -OutFile $sigFile
-          }
+          $date = "2025-06-22"
+          & "scripts/get-msys2-archive.ps1" -Date $date
 
       - name: Install deps using pacman
         run: |

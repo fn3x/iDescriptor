@@ -34,7 +34,7 @@ WirelessGalleryImportWidget::WirelessGalleryImportWidget(QWidget *parent)
       m_importButton(nullptr), m_statusLabel(nullptr)
 {
     setupUI();
-    setMinimumSize(400, 600);
+    setMinimumSize(400, 400);
     setWindowTitle("Wireless Gallery Import - iDescriptor");
 }
 
